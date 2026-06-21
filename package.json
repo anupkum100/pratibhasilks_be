@@ -1,0 +1,31 @@
+{
+  "name": "saree-ecommerce-backend",
+  "version": "1.0.0",
+  "description": "Serverless Node.js Express backend for ecommerce product and order management",
+  "main": "app.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node local.js",
+    "dev": "nodemon local.js",
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "seed:admin": "node scripts/createAdmin.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.2",
+    "multer": "^2.2.0",
+    "serverless-http": "^3.2.0",
+    "streamifier": "^0.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "serverless": "^4.4.18"
+  }
+}
