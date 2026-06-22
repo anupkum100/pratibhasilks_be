@@ -88,26 +88,11 @@ const productSchema = new mongoose.Schema(
       default: ""
     },
 
-    buyer: {
-      name: {
-        type: String,
-        trim: true,
-      },
-      phone: {
-        type: String,
-        trim: true,
-      },
-      price: {
-        type: Number,
-      },
-      comment: {
-        type: String,
-        trim: true,
-      },
-      date: {
-        type: Date,
-      },
-    }
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+    },
   },
   {
     timestamps: true

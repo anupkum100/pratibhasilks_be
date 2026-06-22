@@ -250,9 +250,13 @@ const getProducts = async (req, res) => {
     const colors = parseArray(req.query.colors);
     const sort = req.query.sort || "latest";
 
-    const query = {
-      stock: { $ne: 100 },
-    };
+    const hideOutOfStock = req.query.hideOutOfStock !== "false";
+
+    const query = {};
+
+    if (hideOutOfStock) {
+      query.stock = { $gt: 0 };
+    }
 
     if (fabrics.length) query.fabric = { $in: fabrics };
     if (colors.length) query.color = { $in: colors };
@@ -269,7 +273,7 @@ const getProducts = async (req, res) => {
     const [products, totalProducts] = await Promise.all([
       Product.find(query)
         .select(
-          "sku name price offerPrice mainImageId stock fabric color colorHex categories occasions blouseIncluded"
+          "sku name price offerPrice mainImageId stock fabric color colorHex categories occasions blouseIncluded description additionalInformation"
         )
         .sort(sortOption)
         .skip(skip)
@@ -292,6 +296,7 @@ const getProducts = async (req, res) => {
     });
   } catch (error) {
     console.error("Get products error:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch products",
@@ -330,9 +335,7 @@ async function getProductById(req, res) {
 
 const getProductFilters = async (req, res) => {
   try {
-    const products = await Product.find({
-      stock: { $ne: 0 },
-    }).select("fabric occasions categories color colorHex");
+    const products = await Product.find().select("fabric occasions categories color colorHex");
 
     const filters = {
       fabrics: [],

@@ -1,35 +1,36 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-function authMiddleware(req, res, next) {
+const protect = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization || req.headers.Authorization;
+    const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: token missing"
-      });
+      return res.status(401).json({ message: "Not authorized. Token missing." });
     }
 
     const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    if (!process.env.JWT_SECRET) {
-      return res.status(500).json({
-        success: false,
-        message: "JWT_SECRET is not configured"
-      });
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ message: "User not authorized." });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.admin = decoded;
-
-    return next();
+    req.user = user;
+    next();
   } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Unauthorized: invalid or expired token"
-    });
+    return res.status(401).json({ message: "Not authorized. Invalid token." });
   }
-}
+};
 
-module.exports = authMiddleware;
+const adminOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required." });
+  }
+
+  next();
+};
+
+module.exports = { protect, adminOnly };

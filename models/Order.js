@@ -1,47 +1,81 @@
 const mongoose = require("mongoose");
 
-const orderProductSchema = new mongoose.Schema(
+const orderItemSchema = new mongoose.Schema(
   {
-    productId: {
+    product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
-      required: true
+      required: true,
     },
-    quantity: {
+    sku: {
+      type: String,
+      required: true,
+    },
+    name: String,
+    listedPrice: Number,
+    soldPrice: {
       type: Number,
       required: true,
-      min: 1
-    }
+    },
   },
   { _id: false }
 );
 
 const orderSchema = new mongoose.Schema(
   {
-    products: {
-      type: [orderProductSchema],
+    orderNo: {
+      type: String,
+      unique: true,
       required: true,
+      index: true,
+    },
+    buyer: {
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+      phone: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+    },
+    items: {
+      type: [orderItemSchema],
       validate: {
-        validator: function (items) {
-          return Array.isArray(items) && items.length > 0;
-        },
-        message: "Order must contain at least one product"
-      }
+        validator: (items) => items.length > 0,
+        message: "Order must have at least one product",
+      },
     },
-    totalAmount: {
+    totalListedPrice: {
       type: Number,
-      required: true,
-      min: 0
+      default: 0,
     },
-    createdAt: {
+    totalSoldPrice: {
+      type: Number,
+      default: 0,
+    },
+    comments: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["SOLD", "CANCELLED", "RETURNED"],
+      default: "SOLD",
+    },
+    soldBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    soldAt: {
       type: Date,
-      default: Date.now
-    }
+      default: Date.now,
+    },
   },
-  {
-    timestamps: true
-  }
+  { timestamps: true }
 );
 
-module.exports =
-  mongoose.models.Order || mongoose.model("Order", orderSchema);
+module.exports = mongoose.model("Order", orderSchema);
