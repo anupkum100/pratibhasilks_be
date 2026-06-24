@@ -8,8 +8,7 @@
     "start": "node local.js",
     "dev": "nodemon local.js",
     "deploy": "serverless deploy",
-    "remove": "serverless remove",
-    "seed:admin": "node scripts/createAdmin.js"
+    "remove": "serverless remove"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.5",

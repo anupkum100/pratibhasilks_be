@@ -152,7 +152,7 @@ const getOrders = async (req, res) => {
 
     const [orders, totalOrders] = await Promise.all([
       Order.find(query)
-        .populate("soldBy", "username email role")
+        .populate("soldBy", "name email role")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)

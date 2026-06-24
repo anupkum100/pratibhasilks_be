@@ -100,10 +100,12 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-productSchema.index({ stock: 1 });
+productSchema.index({ sku: 1 }, { unique: true });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ fabric: 1 });
+productSchema.index({ color: 1 });
 productSchema.index({ categories: 1 });
 productSchema.index({ occasions: 1 });
+productSchema.index({ stock: 1 });
 
 module.exports = mongoose.model("Product", productSchema);
