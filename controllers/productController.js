@@ -273,7 +273,7 @@ const getProducts = async (req, res) => {
     const [products, totalProducts] = await Promise.all([
       Product.find(query)
         .select(
-          "sku name price offerPrice mainImageId stock fabric color colorHex categories occasions blouseIncluded description additionalInformation"
+          "sku name price offerPrice mainImageId stock fabric color colorHex categories occasions blouseIncluded description additionalInformation otherImageIds"
         )
         .sort(sortOption)
         .skip(skip)
