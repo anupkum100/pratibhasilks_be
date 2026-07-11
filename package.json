@@ -23,7 +23,9 @@
     "mongoose": "^8.9.2",
     "multer": "^2.2.0",
     "serverless-http": "^3.2.0",
-    "streamifier": "^0.1.1"
+    "streamifier": "^0.1.1",
+    "razorpay": "^2.9.5",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.9",
