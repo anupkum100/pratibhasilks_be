@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const crypto = require("crypto");
-const Order = require("../models/Order_user");
+const PublicOrder = require("../models/PublicOrder");
 const { finalizeReservation } = require("./inventoryService");
 
 
@@ -14,7 +14,7 @@ async function confirmPaidOrder({ order, paymentId, signature }) {
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      const fresh = await Order.findById(order._id).session(session);
+      const fresh = await PublicOrder.findById(order._id).session(session);
       if (!fresh || fresh.paymentStatus === "PAID") return;
       if (fresh.orderStatus === "CANCELLED") {
         fresh.paymentStatus = "PAID";

@@ -94,6 +94,24 @@ const productSchema = new mongoose.Schema(
       ref: "Order",
       default: null,
     },
+
+    reservedStock: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    reservationExpiresAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    soldOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PublicOrder",
+      default: null,
+    },
   },
   {
     timestamps: true

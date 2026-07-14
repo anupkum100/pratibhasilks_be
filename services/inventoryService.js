@@ -1,10 +1,30 @@
 const Product = require("../models/Product")
 
-async function reserveSingleProduct({ sku, expiresAt }) {
+async function reserveSingleProduct({
+  sku,
+  quantity = 1,
+  expiresAt
+}) {
   return Product.findOneAndUpdate(
-    { sku, stock: { $gte: 1 } },
-    { $inc: { stock: -1, reservedStock: 1 }, $set: { reservationExpiresAt: expiresAt } },
-    { new: true }
+    {
+      sku,
+      stock: {
+        $gte: quantity
+      }
+    },
+    {
+      $inc: {
+        stock: -quantity,
+        reservedStock: quantity
+      },
+      $set: {
+        reservationExpiresAt: expiresAt
+      }
+    },
+    {
+      new: true,
+      runValidators: true
+    }
   );
 }
 
@@ -16,10 +36,13 @@ async function finalizeReservation(item, orderId, session) {
   );
 }
 
-async function releaseReservation(item, session) {
+async function releaseReservation({ productId, quantity = 1, session }) {
   return Product.findOneAndUpdate(
-    { _id: item.productId, reservedStock: { $gte: item.quantity } },
-    { $inc: { stock: item.quantity, reservedStock: -item.quantity }, $set: { reservationExpiresAt: null } },
+    { _id: productId, reservedStock: { $gte: quantity } },
+    {
+      $inc: { stock: quantity, reservedStock: -quantity },
+      $set: { reservationExpiresAt: null },
+    },
     { new: true, session }
   );
 }

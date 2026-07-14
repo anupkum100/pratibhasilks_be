@@ -50,4 +50,4 @@ const orderSchema = new mongoose.Schema({
   tracking: { courierName: String, trackingNumber: String, trackingUrl: String },
 }, { timestamps: true });
 
-module.exports = mongoose.model("Order_user", orderSchema);
+module.exports = mongoose.model("PublicOrder", orderSchema);

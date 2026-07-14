@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const Order = require("../models/Order_user");
+const PublicOrder = require("../models/PublicOrder");
 const WebhookEvent = require("../models/WebhookEvent");
 const { confirmPaidOrder } = require("../services/paymentService");
 
@@ -19,12 +19,12 @@ async function razorpayWebhook(req, res) {
     if (["payment.captured", "order.paid"].includes(event.event)) {
       const payment = event.payload?.payment?.entity;
       const orderId = payment?.order_id || event.payload?.order?.entity?.id;
-      const order = await Order.findOne({ razorpayOrderId: orderId });
+      const order = await PublicOrder.findOne({ razorpayOrderId: orderId });
       if (order) await confirmPaidOrder({ order, paymentId: payment?.id || order.razorpayPaymentId, signature: "WEBHOOK_VERIFIED" });
     }
     if (event.event === "payment.failed") {
       const payment = event.payload?.payment?.entity;
-      await Order.findOneAndUpdate({ razorpayOrderId: payment?.order_id, paymentStatus: { $ne: "PAID" } }, {
+      await PublicOrder.findOneAndUpdate({ razorpayOrderId: payment?.order_id, paymentStatus: { $ne: "PAID" } }, {
         paymentStatus: "FAILED", paymentFailureReason: payment?.error_description || "Payment failed",
       });
     }
