@@ -9,6 +9,11 @@ const addressSchema = new mongoose.Schema({
   city: { type: String, required: true, trim: true },
   state: { type: String, required: true, trim: true },
   pincode: { type: String, required: true, trim: true },
+  addressSource: {
+    type: String,
+    enum: ["PINCODE_API", "MANUAL"],
+    default: "PINCODE_API",
+  },
 }, { _id: false });
 
 const itemSchema = new mongoose.Schema({
@@ -16,9 +21,9 @@ const itemSchema = new mongoose.Schema({
   sku: { type: String, required: true },
   name: { type: String, required: true },
   image: String,
-  quantity: { type: Number, required: true, min: 1 },
-  listedPrice: { type: Number, required: true },
-  sellingPrice: { type: Number, required: true },
+  quantity: { type: Number, required: true, min: 1, max: 1 },
+  listedPrice: { type: Number, required: true, min: 0 },
+  sellingPrice: { type: Number, required: true, min: 0 },
 }, { _id: false });
 
 const orderSchema = new mongoose.Schema({
@@ -40,7 +45,7 @@ const orderSchema = new mongoose.Schema({
   paymentMethod: { type: String, enum: ["ONLINE", "COD"], required: true },
   paymentStatus: { type: String, enum: ["PENDING", "PAID", "FAILED", "REFUNDED"], default: "PENDING", index: true },
   orderStatus: { type: String, enum: ["PAYMENT_PENDING", "CONFIRMED", "PROCESSING", "PACKED", "SHIPPED", "DELIVERED", "CANCELLED", "PAYMENT_RECEIVED_AFTER_EXPIRY"], default: "PAYMENT_PENDING", index: true },
-  razorpayOrderId: { type: String, index: true },
+  razorpayOrderId: String,
   razorpayPaymentId: String,
   razorpaySignature: String,
   paymentFailureReason: String,
@@ -49,5 +54,25 @@ const orderSchema = new mongoose.Schema({
   source: { type: String, enum: ["WEBSITE", "INSTAGRAM", "WHATSAPP", "ADMIN"], default: "WEBSITE" },
   tracking: { courierName: String, trackingNumber: String, trackingUrl: String },
 }, { timestamps: true });
+
+orderSchema.index(
+  { razorpayOrderId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      razorpayOrderId: { $type: "string", $gt: "" },
+    },
+  }
+);
+
+orderSchema.index(
+  { razorpayPaymentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      razorpayPaymentId: { $type: "string", $gt: "" },
+    },
+  }
+);
 
 module.exports = mongoose.model("PublicOrder", orderSchema);

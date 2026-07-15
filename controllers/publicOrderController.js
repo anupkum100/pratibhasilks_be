@@ -1,5 +1,28 @@
 const PublicOrder = require("../models/PublicOrder");
 
+const PUBLIC_ORDER_SELECT_FIELDS = [
+  "orderNumber",
+  "orderStatus",
+  "paymentStatus",
+  "paymentMethod",
+  "subtotal",
+  "totalListedPrice",
+  "totalSoldPrice",
+  "discountAmount",
+  "discount",
+  "shippingAmount",
+  "shippingCharge",
+  "totalAmount",
+  "customer",
+  "buyer",
+  "shippingAddress",
+  "items",
+  "tracking",
+  "customerNotes",
+  "createdAt",
+  "updatedAt",
+].join(" ");
+
 const ORDER_SELECT_FIELDS = [
   "orderNumber",
   "orderStatus",
@@ -31,7 +54,9 @@ const ORDER_SELECT_FIELDS = [
 const getPublicOrder = async (req, res) => {
   try {
     const { orderNumber } = req.params;
-    const { token } = req.query;
+    const token =
+      req.get("x-public-access-token") ||
+      req.query.token;
 
     if (!orderNumber || !token) {
       return res.status(400).json({
@@ -43,7 +68,7 @@ const getPublicOrder = async (req, res) => {
       orderNumber,
       publicAccessToken: token,
     })
-      .select(ORDER_SELECT_FIELDS)
+      .select(PUBLIC_ORDER_SELECT_FIELDS)
       .lean();
 
     if (!order) {
@@ -124,11 +149,6 @@ const getPublicOrder = async (req, res) => {
         paymentStatus: order.paymentStatus || "pending",
         paymentMethod: order.paymentMethod || null,
 
-        paymentId:
-          order.paymentId ||
-          order.razorpayPaymentId ||
-          null,
-
         customer: {
           name:
             customerSource.name ||
@@ -179,9 +199,7 @@ const getPublicOrder = async (req, res) => {
         tracking: order.tracking || null,
 
         customerNotes:
-          order.customerNotes ||
-          order.comments ||
-          null,
+          order.customerNotes || null,
       },
     });
   } catch (error) {

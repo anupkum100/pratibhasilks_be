@@ -12,6 +12,13 @@ const generateToken = (user) => {
   );
 };
 
+const toSafeUser = (user) => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+});
+
 const googleLogin = async (req, res) => {
   try {
     const { credential } = req.body;
@@ -28,6 +35,12 @@ const googleLogin = async (req, res) => {
     const payload = ticket.getPayload();
     const email = payload.email?.toLowerCase();
     const name = payload.name || "Admin";
+
+    if (!process.env.ADMIN_EMAILS) {
+      return res.status(500).json({
+        message: "Admin login is not configured.",
+      });
+    }
 
     const allowedAdmins = process.env.ADMIN_EMAILS
       .split(",")
@@ -55,16 +68,18 @@ const googleLogin = async (req, res) => {
 
     res.json({
       token: generateToken(user),
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: toSafeUser(user),
     });
   } catch (error) {
-    res.status(401).json({ message: "Google login failed.", error: error.message });
+    console.error("Google login failed:", error);
+    res.status(401).json({ message: "Google login failed." });
   }
 };
 
-module.exports = { googleLogin };
+const getMe = async (req, res) => {
+  res.json({
+    user: toSafeUser(req.user),
+  });
+};
+
+module.exports = { googleLogin, getMe };

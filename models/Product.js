@@ -25,12 +25,14 @@ const productSchema = new mongoose.Schema(
 
     price: {
       type: Number,
-      required: true
+      required: true,
+      min: 0
     },
 
     offerPrice: {
       type: Number,
-      default: null
+      default: null,
+      min: 0
     },
 
     // Images

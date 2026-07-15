@@ -13,10 +13,18 @@ const sellingPriceOf = (product) => {
   return Number.isFinite(offer) && offer > 0 && offer < regular ? offer : regular;
 };
 
-const shippingChargeFor = (subtotal) => {
-  const threshold = Number(process.env.FREE_SHIPPING_THRESHOLD || 0);
-  const charge = Number(process.env.DEFAULT_SHIPPING_CHARGE || 0);
-  return threshold > 0 && subtotal < threshold ? charge : 0;
+const shippingChargeFor = (subtotal, itemCount = 1, state = "") => {
+  const threshold = Number(process.env.FREE_SHIPPING_THRESHOLD || 5000);
+  const charge = Number(process.env.BASE_SAREE_SHIPPING || 120);
+  const additionalCharge = Number(process.env.ADDITIONAL_SAREE_SHIPPING || 100);
+  const safeItemCount = Math.max(1, Number(itemCount) || 1);
+  const normalizedState = String(state || "").trim();
+
+  if (!normalizedState) return 0;
+
+  if (threshold > 0 && subtotal > threshold) return 0;
+
+  return charge + ((safeItemCount - 1) * additionalCharge);
 };
 
 module.exports = { publicToken, generateOrderNumber, sellingPriceOf, shippingChargeFor }

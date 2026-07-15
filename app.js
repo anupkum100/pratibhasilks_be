@@ -21,8 +21,24 @@ const razorpayWebhook = require("./controllers/webhookController");
 
 const app = express();
 
+const allowedCorsOrigins = String(process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const isProduction = process.env.NODE_ENV === "production";
+
 const corsOptions = {
-  origin: "*",
+  origin: allowedCorsOrigins.length
+    ? (origin, callback) => {
+      if (!origin || allowedCorsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    }
+    : isProduction
+      ? false
+      : "*",
 
   methods: [
     "GET",
@@ -36,7 +52,8 @@ const corsOptions = {
   allowedHeaders: [
     "Content-Type",
     "Authorization",
-    "X-Idempotency-Key"
+    "X-Idempotency-Key",
+    "X-Public-Access-Token"
   ],
 
   optionsSuccessStatus: 204
@@ -47,12 +64,7 @@ app.options(/.*/, cors(corsOptions));
 
 app.use(helmet());
 
-app.post("/api/webhooks/razorpay", express.raw({ type: "application/json" }), razorpayWebhook);
-app.use(express.json({
-  limit: "1mb"
-}));
-
-app.use(async (req, res, next) => {
+const ensureDatabaseConnection = async (req, res, next) => {
   try {
     await connectDB();
     next();
@@ -67,7 +79,19 @@ app.use(async (req, res, next) => {
       message: "Database connection failed"
     });
   }
-});
+};
+
+app.post(
+  "/api/webhooks/razorpay",
+  express.raw({ type: "application/json" }),
+  ensureDatabaseConnection,
+  razorpayWebhook
+);
+app.use(express.json({
+  limit: "1mb"
+}));
+
+app.use(ensureDatabaseConnection);
 
 app.get("/", (req, res) => {
   res.status(200).json({
@@ -97,6 +121,29 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: "Route not found"
+  });
+});
+
+app.use((error, req, res, next) => {
+  console.error("Unhandled API error:", error);
+
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  const statusCode =
+    error.status ||
+    error.statusCode ||
+    (error.name === "MulterError" ? 400 : 500);
+
+  const safeMessage =
+    statusCode >= 500
+      ? "Internal server error"
+      : error.message || "Invalid request";
+
+  return res.status(statusCode).json({
+    success: false,
+    message: safeMessage,
   });
 });
 

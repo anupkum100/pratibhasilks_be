@@ -12,29 +12,63 @@ const generateOrderNo = () => {
   return `PS-${y}${m}${d}-${random}`;
 };
 
+const validateOrderPayload = ({ buyer, items }) => {
+  if (!buyer?.name?.trim() || !buyer?.phone?.trim()) {
+    return "Buyer name and phone are required";
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return "At least one product is required";
+  }
+
+  const invalidItem = items.find((item) => {
+    return (
+      !mongoose.Types.ObjectId.isValid(item.productId) ||
+      !Number.isFinite(Number(item.soldPrice)) ||
+      Number(item.soldPrice) < 0
+    );
+  });
+
+  if (invalidItem) {
+    return "Each order item must include a valid product and sold price";
+  }
+
+  return "";
+};
+
 const createOrder = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
     const { buyer, items, comments } = req.body;
+    const validationMessage = validateOrderPayload({
+      buyer,
+      items,
+    });
 
-    if (!buyer?.name || !buyer?.phone) {
+    if (validationMessage) {
       return res.status(400).json({
-        message: "Buyer name and phone are required",
+        message: validationMessage,
       });
     }
 
-    if (!Array.isArray(items) || items.length === 0) {
+    const productIds = items
+      .map((item) => String(item.productId || ""))
+      .filter(Boolean);
+    const uniqueProductIds = new Set(productIds);
+
+    if (
+      productIds.length !== items.length ||
+      uniqueProductIds.size !== productIds.length
+    ) {
       return res.status(400).json({
-        message: "At least one product is required",
+        message: "Each product can be sold only once in the same order",
       });
     }
 
     let createdOrder;
 
     await session.withTransaction(async () => {
-      const productIds = items.map((item) => item.productId);
-
       const products = await Product.find({
         _id: { $in: productIds },
       }).session(session);
@@ -44,7 +78,11 @@ const createOrder = async (req, res) => {
       }
 
       const unavailableProduct = products.find(
-        (product) => Number(product.stock) <= 0 || product.order
+        (product) =>
+          Number(product.stock) <= 0 ||
+          Number(product.reservedStock || 0) > 0 ||
+          product.order ||
+          product.soldOrder
       );
 
       if (unavailableProduct) {
@@ -97,18 +135,43 @@ const createOrder = async (req, res) => {
 
       createdOrder = order[0];
 
-      await Product.updateMany(
-        {
-          _id: { $in: productIds },
-        },
-        {
-          $set: {
-            stock: 0,
-            order: createdOrder._id,
+      for (const product of products) {
+        const claimedProduct = await Product.findOneAndUpdate(
+          {
+            _id: product._id,
+            stock: { $gt: 0 },
+            order: null,
+            $and: [
+              {
+                $or: [
+                  { reservedStock: 0 },
+                  { reservedStock: { $exists: false } },
+                ],
+              },
+              {
+                $or: [
+                  { soldOrder: null },
+                  { soldOrder: { $exists: false } },
+                ],
+              },
+            ],
           },
-        },
-        { session }
-      );
+          {
+            $set: {
+              stock: 0,
+              order: createdOrder._id,
+            },
+          },
+          {
+            new: true,
+            session,
+          }
+        );
+
+        if (!claimedProduct) {
+          throw new Error(`${product.name} is already sold or reserved`);
+        }
+      }
     });
 
     return res.status(201).json({

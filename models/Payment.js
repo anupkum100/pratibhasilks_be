@@ -2,26 +2,23 @@ const mongoose = require("mongoose");
 
 const paymentSchema = new mongoose.Schema(
     {
+        type: {
+            type: String,
+            trim: true,
+            default: "",
+        },
         paymentType: {
             type: String,
-            enum: [
-                "Inventory",
-                "Packaging",
-                "Logistics",
-                "Marketing",
-                "Technology",
-                "Office",
-                "Miscellaneous",
-            ],
+            trim: true,
             default: "Miscellaneous",
         },
         category: {
             type: String,
-            enum: ["Expense", "Inventory"],
+            trim: true,
             default: "Expense",
         },
-        amount: { type: Number, required: true },
-        quantity: { type: Number, default: 1 },
+        amount: { type: Number, required: true, min: 0 },
+        quantity: { type: Number, default: 1, min: 1 },
         source: { type: String, trim: true },
         paidVia: { type: String, trim: true },
         date: Date,

@@ -1,6 +1,6 @@
 const { z } = require("zod");
 
-const checkoutSchema = z.object({
+const checkoutItemSchema = z.object({
   sku: z
     .string()
     .trim()
@@ -8,10 +8,29 @@ const checkoutSchema = z.object({
     .max(80, "Invalid product SKU."),
 
   quantity: z.literal(1).default(1),
+});
 
-  paymentMethod: z.enum(["ONLINE", "COD"], {
+const checkoutSchema = z.object({
+  sku: z
+    .string()
+    .trim()
+    .min(1, "Product SKU is required.")
+    .max(80, "Invalid product SKU.")
+    .optional(),
+
+  quantity: z.literal(1).default(1).optional(),
+
+  items: z
+    .array(checkoutItemSchema)
+    .min(1, "At least one product is required.")
+    .max(20, "Too many products in one checkout.")
+    .optional(),
+
+  orderType: z.enum(["BUY_NOW", "CART"]).optional(),
+
+  paymentMethod: z.literal("ONLINE", {
     errorMap: () => ({
-      message: "Please select a payment method.",
+      message: "Online payment is required.",
     }),
   }),
 
@@ -77,6 +96,10 @@ const checkoutSchema = z.object({
     pincode: z
       .string()
       .regex(/^\d{6}$/, "Please enter a valid 6-digit PIN code."),
+
+    addressSource: z
+      .enum(["PINCODE_API", "MANUAL"])
+      .optional(),
   }),
 
   customerNotes: z
@@ -84,6 +107,32 @@ const checkoutSchema = z.object({
     .trim()
     .max(500, "Order notes cannot exceed 500 characters.")
     .optional(),
+}).superRefine((value, ctx) => {
+  const checkoutItems = value.items?.length
+    ? value.items
+    : value.sku
+      ? [{ sku: value.sku, quantity: 1 }]
+      : [];
+
+  if (checkoutItems.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["sku"],
+      message: "Product SKU is required.",
+    });
+    return;
+  }
+
+  const skus = checkoutItems.map((item) => item.sku);
+  const uniqueSkus = new Set(skus);
+
+  if (uniqueSkus.size !== skus.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["items"],
+      message: "Duplicate SKUs are not allowed in checkout.",
+    });
+  }
 });
 
 module.exports = { checkoutSchema };

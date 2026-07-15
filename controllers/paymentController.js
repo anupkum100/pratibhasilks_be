@@ -1,5 +1,59 @@
 const Payment = require("../models/Payment");
 
+const allowedSortFields = new Set([
+    "type",
+    "category",
+    "paymentType",
+    "amount",
+    "quantity",
+    "source",
+    "date",
+    "paidVia",
+    "createdAt",
+]);
+
+const sanitizePaymentPayload = (body) => ({
+    type: String(body.type || "").trim(),
+    paymentType: String(body.paymentType || "Miscellaneous").trim() || "Miscellaneous",
+    category: String(body.category || "Expense").trim() || "Expense",
+    amount: Number(body.amount || 0),
+    quantity: Number(body.quantity || 1),
+    source: String(body.source || "").trim(),
+    paidVia: String(body.paidVia || "").trim(),
+    date: body.date || null,
+    comment: String(body.comment || "").trim(),
+});
+
+const validatePaymentPayload = (payload) => {
+    if (!Number.isFinite(payload.amount) || payload.amount < 0) {
+        return "Payment amount must be a valid non-negative number.";
+    }
+
+    if (!Number.isFinite(payload.quantity) || payload.quantity < 1) {
+        return "Quantity must be at least 1.";
+    }
+
+    if (payload.date && Number.isNaN(new Date(payload.date).getTime())) {
+        return "Payment date is invalid.";
+    }
+
+    return "";
+};
+
+const paginationNumber = (value, fallback, min, max) => {
+    const parsed = Number.parseInt(value, 10);
+
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+
+    return Math.min(Math.max(parsed, min), max);
+};
+
+const escapeRegex = (value = "") => {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 const getPayments = async (req, res) => {
     try {
         const {
@@ -12,28 +66,35 @@ const getPayments = async (req, res) => {
         } = req.query;
 
         const query = {};
+        const safePage = paginationNumber(page, 1, 1, 10_000);
+        const safeLimit = paginationNumber(limit, 8, 1, 100);
+        const safeSortBy = allowedSortFields.has(sortBy) ? sortBy : "date";
+        const safeSortOrder = sortOrder === "asc" ? "asc" : "desc";
 
         if (category !== "All") {
             query.category = category;
         }
 
-        if (search.trim()) {
+        const safeSearch = escapeRegex(search.trim());
+
+        if (safeSearch) {
             query.$or = [
-                { paymentType: { $regex: search, $options: "i" } },
-                { source: { $regex: search, $options: "i" } },
-                { paidVia: { $regex: search, $options: "i" } },
-                { comment: { $regex: search, $options: "i" } },
+                { type: { $regex: safeSearch, $options: "i" } },
+                { paymentType: { $regex: safeSearch, $options: "i" } },
+                { source: { $regex: safeSearch, $options: "i" } },
+                { paidVia: { $regex: safeSearch, $options: "i" } },
+                { comment: { $regex: safeSearch, $options: "i" } },
             ];
         }
 
-        const skip = (Number(page) - 1) * Number(limit);
+        const skip = (safePage - 1) * safeLimit;
 
         const sort = {
-            [sortBy]: sortOrder === "asc" ? 1 : -1,
+            [safeSortBy]: safeSortOrder === "asc" ? 1 : -1,
         };
 
         const [payments, total, summary] = await Promise.all([
-            Payment.find(query).sort(sort).skip(skip).limit(Number(limit)),
+            Payment.find(query).sort(sort).skip(skip).limit(safeLimit),
             Payment.countDocuments(query),
             Payment.aggregate([
                 {
@@ -56,10 +117,10 @@ const getPayments = async (req, res) => {
             error: false,
             data: payments,
             pagination: {
-                page: Number(page),
-                limit: Number(limit),
+                page: safePage,
+                limit: safeLimit,
                 total,
-                totalPages: Math.ceil(total / Number(limit)),
+                totalPages: Math.ceil(total / safeLimit),
             },
             summary: {
                 totalSpend: inventorySpend + expenseSpend,
@@ -78,26 +139,46 @@ const getPayments = async (req, res) => {
 
 const createPayment = async (req, res) => {
     try {
-        const payment = await Payment.create(req.body);
+        const payload = sanitizePaymentPayload(req.body);
+        const validationMessage = validatePaymentPayload(payload);
+
+        if (validationMessage) {
+            return res.status(400).json({
+                error: true,
+                message: validationMessage,
+            });
+        }
+
+        const payment = await Payment.create(payload);
 
         res.status(201).json({
             error: false,
             data: payment,
             message: "Payment created",
         });
-    } catch {
+    } catch (error) {
         res.status(500).json({
             error: true,
-            message: "Failed to create payment",
+            message: error.message || "Failed to create payment",
         });
     }
 };
 
 const updatePayment = async (req, res) => {
     try {
+        const payload = sanitizePaymentPayload(req.body);
+        const validationMessage = validatePaymentPayload(payload);
+
+        if (validationMessage) {
+            return res.status(400).json({
+                error: true,
+                message: validationMessage,
+            });
+        }
+
         const payment = await Payment.findByIdAndUpdate(
             req.params.id,
-            req.body,
+            payload,
             { new: true, runValidators: true }
         );
 
@@ -113,10 +194,12 @@ const updatePayment = async (req, res) => {
             data: payment,
             message: "Payment updated",
         });
-    } catch {
-        res.status(500).json({
+    } catch (error) {
+        res.status(error.name === "CastError" ? 400 : 500).json({
             error: true,
-            message: "Failed to update payment",
+            message: error.name === "CastError"
+                ? "Invalid payment ID"
+                : error.message || "Failed to update payment",
         });
     }
 };
@@ -137,9 +220,11 @@ const deletePayment = async (req, res) => {
             message: "Payment deleted successfully",
         });
     } catch (error) {
-        res.status(500).json({
+        res.status(error.name === "CastError" ? 400 : 500).json({
             error: true,
-            message: "Failed to delete payment",
+            message: error.name === "CastError"
+                ? "Invalid payment ID"
+                : "Failed to delete payment",
         });
     }
 };

@@ -1,13 +1,157 @@
+const mongoose = require("mongoose");
 const PublicOrder = require("../models/PublicOrder");
 const razorpay = require("../config/razorpay");
 const { checkoutSchema } = require("../validators/checkoutValidator");
-const { reserveSingleProduct, releaseReservation } = require("../services/inventoryService");
+const { releaseReservation, reserveProducts } = require("../services/inventoryService");
 const { confirmPaidOrder, verifyCheckoutSignature } = require("../services/paymentService");
 const { generateOrderNumber, publicToken, sellingPriceOf, shippingChargeFor } = require("../utils/orderUtils");
-const Product = require("../models/Product");
+
+const toCheckoutItems = (input) => {
+  const items = Array.isArray(input.items) && input.items.length
+    ? input.items
+    : [{ sku: input.sku, quantity: 1 }];
+
+  return items.map((item) => ({
+    sku: item.sku,
+    quantity: 1
+  }));
+};
+
+const checkoutErrorMessage = (
+  error,
+  fallback = "Unable to create order."
+) =>
+  error?.error?.description ||
+  error?.error?.message ||
+  error?.description ||
+  error?.message ||
+  fallback;
+
+const isReusableCheckoutOrder = (order) =>
+  order &&
+  order.paymentMethod === "ONLINE" &&
+  order.orderStatus === "PAYMENT_PENDING" &&
+  order.paymentStatus === "PENDING" &&
+  order.reservationExpiresAt &&
+  new Date(order.reservationExpiresAt).getTime() > Date.now();
+
+const serviceabilityError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const isDeliveryPostOffice = (postOffice) => {
+  const deliveryStatus = String(postOffice?.DeliveryStatus || "").trim().toLowerCase();
+  return deliveryStatus !== "non-delivery";
+};
+
+async function validatePincodeServiceability(shippingAddress) {
+  const pincode = shippingAddress?.pincode;
+  const addressSource = shippingAddress?.addressSource || "PINCODE_API";
+
+  if (!/^\d{6}$/.test(String(pincode || ""))) {
+    throw serviceabilityError("Please enter a valid 6-digit PIN code.");
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.postalpincode.in/pincode/${encodeURIComponent(pincode)}`
+    );
+
+    if (!response.ok) {
+      throw serviceabilityError(
+        "PIN code lookup is currently unavailable.",
+        503
+      );
+    }
+
+    const result = await response.json();
+    const lookupResult = result?.[0];
+
+    if (
+      lookupResult?.Status !== "Success" ||
+      !Array.isArray(lookupResult?.PostOffice) ||
+      lookupResult.PostOffice.length === 0
+    ) {
+      throw serviceabilityError(
+        "No delivery location found for this PIN code."
+      );
+    }
+
+    const hasDeliveryLocation =
+      lookupResult.PostOffice.some(isDeliveryPostOffice);
+
+    if (!hasDeliveryLocation) {
+      throw serviceabilityError(
+        "This PIN code is not serviceable for delivery."
+      );
+    }
+  } catch (error) {
+    if (
+      error.statusCode &&
+      error.statusCode !== 503
+    ) {
+      throw error;
+    }
+
+    if (addressSource === "MANUAL") {
+      return;
+    }
+
+    throw serviceabilityError(
+      error.message || "PIN code lookup is currently unavailable.",
+      error.statusCode || 503
+    );
+  }
+}
+
+const releaseReservedProducts = async (reservedProducts) => {
+  for (const product of reservedProducts) {
+    await releaseReservation({
+      productId: product._id,
+      quantity: 1
+    }).catch((releaseError) => {
+      console.error(
+        "Reservation release failed:",
+        releaseError
+      );
+    });
+  }
+};
+
+async function ensureGatewayOrder(order) {
+  if (
+    !isReusableCheckoutOrder(order) ||
+    order.razorpayOrderId
+  ) {
+    return null;
+  }
+
+  const gatewayOrder = await razorpay.orders.create({
+    amount: Math.round(Number(order.totalAmount) * 100),
+    currency: "INR",
+    receipt: order.orderNumber,
+    notes: {
+      internalOrderId: String(order._id),
+      skus: order.items.map((item) => item.sku).join(",")
+    }
+  });
+
+  if (!gatewayOrder?.id) {
+    throw new Error(
+      "Razorpay order could not be created."
+    );
+  }
+
+  order.razorpayOrderId = gatewayOrder.id;
+  await order.save();
+
+  return gatewayOrder;
+}
 
 async function createCheckoutOrder(req, res) {
-  let reservedProduct = null;
+  let reservedProducts = [];
   let createdOrder = null;
   let reservationCompleted = false;
 
@@ -27,13 +171,25 @@ async function createCheckoutOrder(req, res) {
       });
 
       if (existingOrder) {
+        if (!isReusableCheckoutOrder(existingOrder)) {
+          return res.status(409).json({
+            success: false,
+            message:
+              "This checkout attempt is no longer active. Please retry checkout."
+          });
+        }
+
+        const gatewayOrder = await ensureGatewayOrder(existingOrder);
+
         return res
           .status(200)
-          .json(toCheckoutResponse(existingOrder));
+          .json(toCheckoutResponse(existingOrder, gatewayOrder));
       }
     }
 
-    const quantity = 1;
+    await validatePincodeServiceability(input.shippingAddress);
+
+    const checkoutItems = toCheckoutItems(input);
     const reservationMinutes = Number(
       process.env.RESERVATION_MINUTES || 10
     );
@@ -59,31 +215,50 @@ async function createCheckoutOrder(req, res) {
      *   }
      * }
      */
-    reservedProduct = await reserveSingleProduct({
-      sku: input.sku,
-      quantity,
+    reservedProducts = await reserveProducts({
+      items: checkoutItems,
       expiresAt
     });
 
-    if (!reservedProduct) {
+    if (!reservedProducts) {
       return res.status(409).json({
         success: false,
         message:
-          "This saree has already been sold or is currently reserved."
+          "One or more sarees have already been sold or are currently reserved."
       });
     }
 
-    const sellingPrice = sellingPriceOf(reservedProduct);
+    const orderItems = reservedProducts.map((product) => {
+      const sellingPrice = sellingPriceOf(product);
 
-    if (
-      !Number.isFinite(sellingPrice) ||
-      sellingPrice <= 0
-    ) {
-      throw new Error("Invalid product price.");
-    }
+      if (
+        !Number.isFinite(sellingPrice) ||
+        sellingPrice <= 0
+      ) {
+        throw new Error(`Invalid product price for ${product.sku}.`);
+      }
 
-    const subtotal = sellingPrice * quantity;
-    const shippingCharge = shippingChargeFor(subtotal);
+      return {
+        productId: product._id,
+        sku: product.sku,
+        name: product.name,
+        image: product.mainImageId,
+        quantity: 1,
+        listedPrice: Number(product.price),
+        sellingPrice
+      };
+    });
+
+    const subtotal = orderItems.reduce(
+      (total, item) => total + (item.sellingPrice * item.quantity),
+      0
+    );
+
+    const shippingCharge = shippingChargeFor(
+      subtotal,
+      orderItems.length,
+      input.shippingAddress.state
+    );
     const totalAmount = subtotal + shippingCharge;
 
     createdOrder = await PublicOrder.create({
@@ -93,18 +268,9 @@ async function createCheckoutOrder(req, res) {
 
       customer: input.customer,
       shippingAddress: input.shippingAddress,
+      orderType: orderItems.length > 1 ? "CART" : input.orderType || "BUY_NOW",
 
-      items: [
-        {
-          productId: reservedProduct._id,
-          sku: reservedProduct.sku,
-          name: reservedProduct.name,
-          image: reservedProduct.mainImageId,
-          quantity,
-          listedPrice: Number(reservedProduct.price),
-          sellingPrice
-        }
-      ],
+      items: orderItems,
 
       subtotal,
       shippingCharge,
@@ -112,43 +278,11 @@ async function createCheckoutOrder(req, res) {
 
       paymentMethod: input.paymentMethod,
       paymentStatus: "PENDING",
-
-      orderStatus:
-        input.paymentMethod === "COD"
-          ? "CONFIRMED"
-          : "PAYMENT_PENDING",
+      orderStatus: "PAYMENT_PENDING",
 
       reservationExpiresAt: expiresAt,
       customerNotes: input.customerNotes || ""
     });
-
-    if (input.paymentMethod === "COD") {
-      /*
-       * Finalize the reserved stock. This should only reduce
-       * reservedStock, because stock was already reduced when reserved.
-       */
-      await confirmPaidOrder({
-        order: createdOrder,
-        paymentId: "COD",
-        signature: "COD"
-      });
-
-      reservationCompleted = true;
-
-      createdOrder.paymentStatus = "PENDING";
-      createdOrder.orderStatus = "CONFIRMED";
-      createdOrder.reservationExpiresAt = null;
-
-      await createdOrder.save();
-
-      return res.status(201).json({
-        success: true,
-        paymentRequired: false,
-        orderNumber: createdOrder.orderNumber,
-        publicAccessToken:
-          createdOrder.publicAccessToken
-      });
-    }
 
     const gatewayOrder =
       await razorpay.orders.create({
@@ -158,7 +292,7 @@ async function createCheckoutOrder(req, res) {
 
         notes: {
           internalOrderId: String(createdOrder._id),
-          sku: input.sku
+          skus: orderItems.map((item) => item.sku).join(",")
         }
       });
 
@@ -210,26 +344,28 @@ async function createCheckoutOrder(req, res) {
        * the duplicate key, so release this request's reservation.
        */
       if (
-        reservedProduct &&
+        reservedProducts.length > 0 &&
         !reservationCompleted
       ) {
-        await releaseReservation({
-          productId: reservedProduct._id,
-          quantity: 1
-        }).catch((releaseError) => {
-          console.error(
-            "Duplicate request reservation release failed:",
-            releaseError
-          );
-        });
+        await releaseReservedProducts(reservedProducts);
       }
 
       if (existingOrder) {
+        if (!isReusableCheckoutOrder(existingOrder)) {
+          return res.status(409).json({
+            success: false,
+            message:
+              "This checkout attempt is no longer active. Please retry checkout."
+          });
+        }
+
+        const gatewayOrder = await ensureGatewayOrder(existingOrder);
+
         return res
           .status(200)
           .json({
             success: true,
-            ...toCheckoutResponse(existingOrder)
+            ...toCheckoutResponse(existingOrder, gatewayOrder)
           });
       }
     }
@@ -239,18 +375,10 @@ async function createCheckoutOrder(req, res) {
      * but Razorpay order creation failed.
      */
     if (
-      reservedProduct &&
+      reservedProducts.length > 0 &&
       !reservationCompleted
     ) {
-      await releaseReservation({
-        productId: reservedProduct._id,
-        quantity: 1
-      }).catch((releaseError) => {
-        console.error(
-          "Reservation release failed:",
-          releaseError
-        );
-      });
+      await releaseReservedProducts(reservedProducts);
     }
 
     /*
@@ -277,16 +405,17 @@ async function createCheckoutOrder(req, res) {
 
     const isValidation =
       error?.name === "ZodError";
+    const statusCode =
+      isValidation ? 400 : error.statusCode || 500;
 
     return res
-      .status(isValidation ? 400 : 500)
+      .status(statusCode)
       .json({
         success: false,
         message: isValidation
           ? error.issues?.[0]?.message ||
           "Invalid checkout information."
-          : error.message ||
-          "Unable to create order."
+          : checkoutErrorMessage(error)
       });
   }
 }
@@ -303,6 +432,8 @@ function toCheckoutResponse(
     orderNumber: order.orderNumber,
     publicAccessToken:
       order.publicAccessToken,
+    reservationExpiresAt:
+      order.reservationExpiresAt,
 
     razorpayOrderId:
       gatewayOrder?.id ||
@@ -325,6 +456,8 @@ function toCheckoutResponse(
 }
 
 async function cancelCheckoutOrder(req, res) {
+  const session = await mongoose.startSession();
+
   try {
     const {
       internalOrderId,
@@ -339,123 +472,111 @@ async function cancelCheckoutOrder(req, res) {
       });
     }
 
-    const order = await PublicOrder.findOne({
-      _id: internalOrderId,
-      publicAccessToken,
+    let cancelledOrderNumber = "";
+    let earlyResponse = null;
+
+    await session.withTransaction(async () => {
+      const order = await PublicOrder.findOne({
+        _id: internalOrderId,
+        publicAccessToken,
+      }).session(session);
+
+      if (!order) {
+        earlyResponse = {
+          status: 404,
+          body: {
+            success: false,
+            message: "Order not found.",
+          },
+        };
+        return;
+      }
+
+      /*
+       * Never release inventory for a completed payment.
+       */
+      if (order.paymentStatus === "PAID") {
+        earlyResponse = {
+          status: 409,
+          body: {
+            success: false,
+            message:
+              "This order has already been paid and cannot be cancelled.",
+          },
+        };
+        return;
+      }
+
+      /*
+       * Make the endpoint idempotent.
+       * Repeated cancellation requests should not restore stock twice.
+       */
+      if (
+        order.orderStatus === "CANCELLED"
+      ) {
+        earlyResponse = {
+          status: 200,
+          body: {
+            success: true,
+            message:
+              "The reservation has already been released.",
+            orderNumber: order.orderNumber,
+          },
+        };
+        return;
+      }
+
+      if (
+        order.orderStatus !== "PAYMENT_PENDING"
+      ) {
+        earlyResponse = {
+          status: 409,
+          body: {
+            success: false,
+            message:
+              "This order is not eligible for reservation cancellation.",
+          },
+        };
+        return;
+      }
+
+      for (const item of order.items) {
+        const releasedProduct = await releaseReservation({
+          productId: item.productId,
+          quantity: item.quantity,
+          session,
+        });
+
+        if (!releasedProduct) {
+          throw new Error(
+            `Reservation could not be released for ${item.sku}.`
+          );
+        }
+      }
+
+      order.orderStatus = "CANCELLED";
+      order.paymentStatus = "FAILED";
+      order.reservationExpiresAt = null;
+      order.customerNotes = [
+        order.customerNotes,
+        "Customer cancelled the payment reservation.",
+      ].filter(Boolean).join("\n");
+
+      await order.save({ session });
+      cancelledOrderNumber = order.orderNumber;
     });
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found.",
-      });
+    if (earlyResponse) {
+      return res
+        .status(earlyResponse.status)
+        .json(earlyResponse.body);
     }
-
-    /*
-     * Never release inventory for a completed payment.
-     */
-    if (order.paymentStatus === "PAID") {
-      return res.status(409).json({
-        success: false,
-        message:
-          "This order has already been paid and cannot be cancelled.",
-      });
-    }
-
-    /*
-     * Make the endpoint idempotent.
-     * Repeated cancellation requests should not restore stock twice.
-     */
-    if (
-      order.orderStatus === "CANCELLED"
-    ) {
-      return res.status(200).json({
-        success: true,
-        message:
-          "The reservation has already been released.",
-        orderNumber: order.orderNumber,
-      });
-    }
-
-    if (
-      order.orderStatus !== "PAYMENT_PENDING"
-    ) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "This order is not eligible for reservation cancellation.",
-      });
-    }
-
-    for (const item of order.items) {
-      const releasedProduct =
-        await Product.findOneAndUpdate(
-          {
-            _id: item.productId,
-
-            /*
-             * This condition prevents stock from being
-             * restored multiple times.
-             */
-            reservedStock: {
-              $gte: item.quantity,
-            },
-
-            /*
-             * Do not release a product already assigned
-             * to a successful sold order.
-             */
-            $or: [
-              { soldOrder: null },
-              { soldOrder: { $exists: false } },
-            ],
-          },
-          {
-            $inc: {
-              stock: item.quantity,
-              reservedStock: -item.quantity,
-            },
-
-            $set: {
-              reservationExpiresAt: null,
-            },
-          },
-          {
-            new: true,
-          }
-        );
-
-      if (!releasedProduct) {
-        console.warn(
-          `Reservation could not be released for product ${item.productId}`
-        );
-
-        return res.status(409).json({
-          success: false,
-          message:
-            "The reservation could not be released because the product state has changed.",
-        });
-      }
-    }
-
-    order.orderStatus = "CANCELLED";
-    order.paymentStatus = "FAILED";
-    order.reservationExpiresAt = null;
-
-    order.comments = [
-      ...(Array.isArray(order.comments)
-        ? order.comments
-        : []),
-      "Customer cancelled the payment reservation.",
-    ];
-
-    await order.save();
 
     return res.status(200).json({
       success: true,
       message:
         "Reservation cancelled successfully.",
-      orderNumber: order.orderNumber,
+      orderNumber: cancelledOrderNumber,
     });
   } catch (error) {
     console.error(
@@ -476,6 +597,8 @@ async function cancelCheckoutOrder(req, res) {
         error.message ||
         "Unable to cancel the reservation.",
     });
+  } finally {
+    await session.endSession();
   }
 }
 
@@ -483,15 +606,52 @@ async function cancelCheckoutOrder(req, res) {
 async function verifyPayment(req, res) {
   try {
     const { internalOrderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (
+      !internalOrderId ||
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment verification details."
+      });
+    }
+
     const order = await PublicOrder.findOne({ _id: internalOrderId, razorpayOrderId: razorpay_order_id });
-    if (!order) return res.status(404).json({ message: "Order not found." });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found."
+      });
+    }
+
     if (!verifyCheckoutSignature({ razorpayOrderId: razorpay_order_id, razorpayPaymentId: razorpay_payment_id, signature: razorpay_signature })) {
-      return res.status(400).json({ message: "Payment verification failed." });
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed."
+      });
     }
     await confirmPaidOrder({ order, paymentId: razorpay_payment_id, signature: razorpay_signature });
-    return res.json({ orderNumber: order.orderNumber, publicAccessToken: order.publicAccessToken });
+    return res.json({
+      success: true,
+      orderNumber: order.orderNumber,
+      publicAccessToken: order.publicAccessToken
+    });
   } catch (error) {
-    return res.status(500).json({ message: error.message || "Payment verification failed." });
+    console.error("Payment verification error:", error);
+
+    const isConfigurationError =
+      error.message?.toLowerCase().includes("configured") ||
+      error.message?.toLowerCase().includes("secret");
+
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: isConfigurationError
+        ? "Payment verification failed."
+        : error.message || "Payment verification failed."
+    });
   }
 }
 
