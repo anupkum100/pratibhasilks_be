@@ -98,12 +98,7 @@ const getPublicOrder = async (req, res) => {
           productId: item.productId || item._id,
           name: item.name,
           sku: item.sku,
-          image:
-            item.image ||
-            item.imageUrl ||
-            item.mainImage ||
-            item.mainImageUrl ||
-            null,
+          image: item.mainImageId,
           quantity,
           soldPrice,
           listedPrice,
@@ -235,13 +230,7 @@ const normalizeOrderItem = (item = {}) => {
     name: item.name || null,
     sku: item.sku || null,
 
-    image:
-      item.image ||
-      item.imageUrl ||
-      item.mainImage ||
-      item.mainImageUrl ||
-      item.productImage ||
-      null,
+    image: item.mainImageId || null,
 
     quantity,
     sellingPrice,

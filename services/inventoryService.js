@@ -6,17 +6,17 @@ async function reserveSingleProduct({
   expiresAt,
   session
 }) {
-	  return Product.findOneAndUpdate(
-	    {
-	      sku,
-	      stock: {
-	        $gte: quantity
-	      },
-	      $or: [
-	        { soldOrder: null },
-	        { soldOrder: { $exists: false } },
-	      ],
-	    },
+  return Product.findOneAndUpdate(
+    {
+      sku,
+      stock: {
+        $gte: quantity
+      },
+      $or: [
+        { soldOrder: null },
+        { soldOrder: { $exists: false } },
+      ],
+    },
     {
       $inc: {
         stock: -quantity,
@@ -34,33 +34,46 @@ async function reserveSingleProduct({
   );
 }
 
-async function reserveProducts({
-  items,
-  expiresAt
-}) {
+async function reserveProducts(checkoutItems, expiresAt) {
   const reservedProducts = [];
+  const unavailableItems = [];
 
-  try {
-    for (const item of items) {
-      const reservedProduct = await reserveSingleProduct({
+  for (const item of checkoutItems) {
+    const reservedProduct = await Product.findOneAndUpdate(
+      {
         sku: item.sku,
-        quantity: item.quantity,
-        expiresAt
-      });
-
-      if (!reservedProduct) {
-        await rollbackReservations(reservedProducts);
-        return null;
+        stock: { $gte: item.quantity },
+      },
+      {
+        $inc: {
+          stock: -item.quantity,
+          reservedStock: item.quantity,
+        },
+        $set: {
+          reservationExpiresAt: expiresAt,
+        },
+      },
+      {
+        new: true,
       }
+    );
 
-      reservedProducts.push(reservedProduct);
+    if (!reservedProduct) {
+      unavailableItems.push({
+        sku: item.sku,
+        name: item.name,
+        productId: item.productId,
+      });
+      continue;
     }
 
-    return reservedProducts;
-  } catch (error) {
-    await rollbackReservations(reservedProducts);
-    throw error;
+    reservedProducts.push(reservedProduct);
   }
+
+  return {
+    reservedProducts,
+    unavailableItems,
+  };
 }
 
 async function rollbackReservations(products) {

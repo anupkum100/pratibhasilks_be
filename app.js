@@ -15,7 +15,6 @@ const paymentRoutes = require("./routes/paymentRoutes");
 // User checkout and payment gateway
 const checkoutRoutes = require("./routes/checkoutRoutes");
 const publicOrderRoutes = require("./routes/publicOrderRoutes");
-const internalRoutes = require("./routes/internalRoutes");
 const razorpayWebhook = require("./controllers/webhookController");
 
 
@@ -115,7 +114,6 @@ app.use("/api/payments", paymentRoutes);
 
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/orders/public", publicOrderRoutes);
-app.use("/api/internal", internalRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

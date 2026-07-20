@@ -5,6 +5,7 @@ const { checkoutSchema } = require("../validators/checkoutValidator");
 const { releaseReservation, reserveProducts } = require("../services/inventoryService");
 const { confirmPaidOrder, verifyCheckoutSignature } = require("../services/paymentService");
 const { generateOrderNumber, publicToken, sellingPriceOf, shippingChargeFor } = require("../utils/orderUtils");
+const { sendOrderNotifications } = require("../services/orderNotificationService");
 
 const toCheckoutItems = (input) => {
   const items = Array.isArray(input.items) && input.items.length
@@ -158,8 +159,7 @@ async function createCheckoutOrder(req, res) {
   try {
     const input = checkoutSchema.parse(req.body);
 
-    const checkoutAttemptId =
-      req.get("X-Idempotency-Key") || undefined;
+    const checkoutAttemptId = req.get("X-Idempotency-Key") || undefined;
 
     /*
      * Return the same checkout for repeated requests using the same
@@ -191,40 +191,44 @@ async function createCheckoutOrder(req, res) {
 
     const checkoutItems = toCheckoutItems(input);
     const reservationMinutes = Number(
-      process.env.RESERVATION_MINUTES || 10
+      process.env.RESERVATION_MINUTES || 1
     );
 
     const expiresAt = new Date(
       Date.now() + reservationMinutes * 60_000
     );
 
-    /*
-     * This must internally use a single atomic findOneAndUpdate:
-     *
-     * filter:
-     * {
-     *   sku,
-     *   stock: { $gte: quantity }
-     * }
-     *
-     * update:
-     * {
-     *   $inc: {
-     *     stock: -quantity,
-     *     reservedStock: quantity
-     *   }
-     * }
-     */
-    reservedProducts = await reserveProducts({
-      items: checkoutItems,
-      expiresAt
-    });
+    const {
+      reservedProducts,
+      unavailableItems,
+    } = await reserveProducts(checkoutItems, expiresAt);
 
-    if (!reservedProducts) {
+    if (unavailableItems.length > 0) {
+      // Release products that were reserved successfully during this attempt.
+      await Promise.all(
+        reservedProducts.map((product) =>
+          Product.findOneAndUpdate(
+            {
+              _id: product._id,
+              reservedStock: { $gte: 1 },
+            },
+            {
+              $inc: {
+                stock: 1,
+                reservedStock: -1,
+              },
+            }
+          )
+        )
+      );
+
       return res.status(409).json({
         success: false,
         message:
-          "One or more sarees have already been sold or are currently reserved."
+          "Some sarees have already been sold or are currently reserved.",
+        // unavailableItems,
+        unavailableSkus: unavailableItems.map((item) => item.sku),
+        canRemoveUnavailableItems: true,
       });
     }
 
@@ -605,7 +609,12 @@ async function cancelCheckoutOrder(req, res) {
 
 async function verifyPayment(req, res) {
   try {
-    const { internalOrderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const {
+      internalOrderId,
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    } = req.body;
 
     if (
       !internalOrderId ||
@@ -615,43 +624,137 @@ async function verifyPayment(req, res) {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid payment verification details."
+        message: "Invalid payment verification details.",
       });
     }
 
-    const order = await PublicOrder.findOne({ _id: internalOrderId, razorpayOrderId: razorpay_order_id });
+    const order = await PublicOrder.findOne({
+      _id: internalOrderId,
+      razorpayOrderId: razorpay_order_id,
+    });
+
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Order not found."
+        message: "Order not found.",
       });
     }
 
-    if (!verifyCheckoutSignature({ razorpayOrderId: razorpay_order_id, razorpayPaymentId: razorpay_payment_id, signature: razorpay_signature })) {
+    const isSignatureValid = verifyCheckoutSignature({
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+    });
+
+    if (!isSignatureValid) {
       return res.status(400).json({
         success: false,
-        message: "Payment verification failed."
+        message: "Payment verification failed.",
       });
     }
-    await confirmPaidOrder({ order, paymentId: razorpay_payment_id, signature: razorpay_signature });
-    return res.json({
+
+    /*
+     * Razorpay or the frontend may retry this endpoint.
+     * If this exact payment has already been processed,
+     * return success without sending notifications again.
+     */
+    if (
+      order.paymentStatus === "PAID" &&
+      order.razorpayPaymentId === razorpay_payment_id
+    ) {
+      return res.status(200).json({
+        success: true,
+        alreadyProcessed: true,
+        orderNumber: order.orderNumber,
+        publicAccessToken: order.publicAccessToken,
+        notifications: {
+          skipped: true,
+          reason: "Payment was already processed.",
+        },
+      });
+    }
+
+    /*
+     * Prevent a different Razorpay payment from being applied
+     * to an order that is already marked as paid.
+     */
+    if (order.paymentStatus === "PAID") {
+      return res.status(409).json({
+        success: false,
+        message: "This order has already been paid.",
+      });
+    }
+
+    /*
+     * confirmPaidOrder should atomically change the order
+     * from unpaid to paid and finalize the reserved stock.
+     */
+    const paidOrder = await confirmPaidOrder({
+      order,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+    });
+
+    let notifications;
+
+    try {
+      notifications = await sendOrderNotifications(
+        paidOrder
+      );
+    } catch (notificationError) {
+      console.error(
+        "[Order Notification] Failed after payment confirmation",
+        {
+          orderNumber: paidOrder.orderNumber,
+          error:
+            notificationError.stack ||
+            notificationError.message ||
+            notificationError,
+        }
+      );
+
+      /*
+       * The payment remains successful even when an email,
+       * SMS or WhatsApp notification fails.
+       */
+      notifications = {
+        success: false,
+        error:
+          notificationError.message ||
+          "One or more notifications failed.",
+      };
+    }
+
+    return res.status(200).json({
       success: true,
-      orderNumber: order.orderNumber,
-      publicAccessToken: order.publicAccessToken
+      alreadyProcessed: false,
+      orderNumber: paidOrder.orderNumber,
+      publicAccessToken: paidOrder.publicAccessToken,
+      notifications,
     });
   } catch (error) {
-    console.error("Payment verification error:", error);
+    console.error(
+      "Payment verification error:",
+      error.stack || error
+    );
+
+    const errorMessage = String(
+      error.message || ""
+    ).toLowerCase();
 
     const isConfigurationError =
-      error.message?.toLowerCase().includes("configured") ||
-      error.message?.toLowerCase().includes("secret");
+      errorMessage.includes("configured") ||
+      errorMessage.includes("secret");
 
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: isConfigurationError
-        ? "Payment verification failed."
-        : error.message || "Payment verification failed."
-    });
+    return res
+      .status(error.statusCode || 500)
+      .json({
+        success: false,
+        message: isConfigurationError
+          ? "Payment verification failed."
+          : error.message ||
+          "Payment verification failed.",
+      });
   }
 }
 
