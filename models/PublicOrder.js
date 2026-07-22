@@ -79,7 +79,7 @@ const itemSchema = new mongoose.Schema(
       trim: true,
     },
 
-    image: {
+    mainImageId: {
       type: String,
       trim: true,
     },

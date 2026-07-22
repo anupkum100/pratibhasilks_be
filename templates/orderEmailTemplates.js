@@ -1,11 +1,11 @@
 const {
-    escapeHtml,
-    formatMoney,
-    getCustomer,
-    getOrderTotal,
-    formatAddress,
-    getPublicOrderUrl,
-    buildItemsText,
+  escapeHtml,
+  formatMoney,
+  getCustomer,
+  getOrderTotal,
+  formatAddress,
+  getPublicOrderUrl,
+  buildItemsText,
 } = require("../utils/orderNotificationUtils");
 
 /*
@@ -15,32 +15,32 @@ const {
  */
 
 const BRAND = {
-    black: "#171411",
-    blackSoft: "#181512",
+  black: "#171411",
+  blackSoft: "#181512",
 
-    gold: "#D8B46A",
-    goldLight: "#E3C37F",
-    goldMuted: "#9A7B4F",
-    goldDark: "#6B4F22",
+  gold: "#D8B46A",
+  goldLight: "#E3C37F",
+  goldMuted: "#9A7B4F",
+  goldDark: "#6B4F22",
 
-    background: "#F8F3EC",
-    cream: "#FCF9F5",
-    creamDark: "#F4EEE7",
-    white: "#FFFFFF",
+  background: "#F8F3EC",
+  cream: "#FCF9F5",
+  creamDark: "#F4EEE7",
+  white: "#FFFFFF",
 
-    text: "#302A25",
-    muted: "#71665C",
-    mutedLight: "#948476",
+  text: "#302A25",
+  muted: "#71665C",
+  mutedLight: "#948476",
 
-    border: "#EDE4DA",
-    borderStrong: "#D8C7B3",
+  border: "#EDE4DA",
+  borderStrong: "#D8C7B3",
 
-    success: "#167A62",
-    successBackground: "#ECFDF5",
-    successBorder: "#A7F3D0",
+  success: "#167A62",
+  successBackground: "#ECFDF5",
+  successBorder: "#A7F3D0",
 
-    warningBackground: "#FFF9EA",
-    warningBorder: "#F1DFC0",
+  warningBackground: "#FFF9EA",
+  warningBorder: "#F1DFC0",
 };
 
 /*
@@ -50,146 +50,146 @@ const BRAND = {
  */
 
 function getWebsiteBaseUrl() {
-    return String(
-        "https://www.pratibhasilks.com"
-    ).replace(/\/$/, "");
+  return String(
+    "https://www.pratibhasilks.com"
+  ).replace(/\/$/, "");
 }
 
 function getWebsiteLinks() {
-    const baseUrl = getWebsiteBaseUrl();
+  const baseUrl = getWebsiteBaseUrl();
 
-    return {
-        home: baseUrl,
+  return {
+    home: baseUrl,
 
-        collections:
-            `${baseUrl}/products`,
+    collections:
+      `${baseUrl}/products`,
 
-        contact:
-            `${baseUrl}/contact`,
+    contact:
+      `${baseUrl}/contact`,
 
-        instagram:
-            "https://www.instagram.com/pratibhasilkssarees/",
+    instagram:
+      "https://www.instagram.com/pratibhasilkssarees/",
 
-        whatsapp:
-            "https://wa.me/919730880398",
-    };
+    whatsapp:
+      "https://wa.me/919730880398",
+  };
 }
 
 function getPaymentId(order) {
-    return (
-        order?.razorpayPaymentId ||
-        order?.paymentId ||
-        "Not available"
-    );
+  return (
+    order?.razorpayPaymentId ||
+    order?.paymentId ||
+    "Not available"
+  );
 }
 
 function getPaymentStatus(order) {
-    return order?.paymentStatus || "PAID";
+  return order?.paymentStatus || "PAID";
 }
 
 function getOrderStatus(order) {
-    return order?.orderStatus || "CONFIRMED";
+  return order?.orderStatus || "CONFIRMED";
 }
 
 function getOrderDate(order) {
-    const dateValue =
-        order?.paidAt ||
-        order?.createdAt ||
-        order?.updatedAt;
+  const dateValue =
+    order?.paidAt ||
+    order?.createdAt ||
+    order?.updatedAt;
 
-    if (!dateValue) {
-        return "";
-    }
+  if (!dateValue) {
+    return "";
+  }
 
-    const date = new Date(dateValue);
+  const date = new Date(dateValue);
 
-    if (Number.isNaN(date.getTime())) {
-        return "";
-    }
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
 
-    return new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-        timeZone: "Asia/Kolkata",
-    }).format(date);
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  }).format(date);
 }
 
 function formatStatus(value) {
-    if (!value) {
-        return "";
-    }
+  if (!value) {
+    return "";
+  }
 
-    return String(value)
-        .replaceAll("_", " ")
-        .replace(/\b\w/g, (character) =>
-            character.toUpperCase()
-        );
+  return String(value)
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) =>
+      character.toUpperCase()
+    );
 }
 
 function getItemPrice(item) {
-    return Number(
-        item?.sellingPrice ??
-        item?.soldPrice ??
-        item?.offerPrice ??
-        item?.price ??
-        item?.listedPrice ??
-        0
-    );
+  return Number(
+    item?.sellingPrice ??
+    item?.soldPrice ??
+    item?.offerPrice ??
+    item?.price ??
+    item?.listedPrice ??
+    0
+  );
 }
 
 function getOrderSubtotal(order) {
-    return Number(
-        order?.subtotal ??
-        order?.totalSoldPrice ??
-        order?.totalListedPrice ??
-        getOrderTotal(order)
-    );
+  return Number(
+    order?.subtotal ??
+    order?.totalSoldPrice ??
+    order?.totalListedPrice ??
+    getOrderTotal(order)
+  );
 }
 
 function getShippingAmount(order) {
-    return Number(
-        order?.shippingAmount ??
-        order?.shippingCharge ??
-        0
-    );
+  return Number(
+    order?.shippingAmount ??
+    order?.shippingCharge ??
+    0
+  );
 }
 
 function getDiscountAmount(order) {
-    return Number(
-        order?.discountAmount ??
-        order?.discount ??
-        0
-    );
+  return Number(
+    order?.discountAmount ??
+    order?.discount ??
+    0
+  );
 }
 
 function getCustomerPhone(order) {
-    const customer = getCustomer(order);
+  const customer = getCustomer(order);
 
-    return (
-        customer?.phone ||
-        order?.shippingAddress?.phone ||
-        ""
-    );
+  return (
+    customer?.phone ||
+    order?.shippingAddress?.phone ||
+    ""
+  );
 }
 
 function getCustomerWhatsAppUrl(order) {
-    const phone = String(getCustomerPhone(order))
-        .replace(/\D/g, "")
-        .replace(/^91/, "");
+  const phone = String(getCustomerPhone(order))
+    .replace(/\D/g, "")
+    .replace(/^91/, "");
 
-    if (!phone) {
-        return "";
-    }
+  if (!phone) {
+    return "";
+  }
 
-    const message = encodeURIComponent(
-        `Hello, this is Pratibha Silks regarding your order ${order.orderNumber}.`
-    );
+  const message = encodeURIComponent(
+    `Hello, this is Pratibha Silks regarding your order ${order.orderNumber}.`
+  );
 
-    return `https://wa.me/91${phone}?text=${message}`;
+  return `https://wa.me/91${phone}?text=${message}`;
 }
 
 /*
@@ -199,10 +199,10 @@ function getCustomerWhatsAppUrl(order) {
  */
 
 function navigationLink({
-    href,
-    label,
+  href,
+  label,
 }) {
-    return `
+  return `
       <a
         href="${escapeHtml(href)}"
         style="
@@ -219,10 +219,10 @@ function navigationLink({
 }
 
 function footerLink({
-    href,
-    label,
+  href,
+  label,
 }) {
-    return `
+  return `
       <a
         href="${escapeHtml(href)}"
         style="
@@ -239,11 +239,11 @@ function footerLink({
 }
 
 function sectionHeading({
-    eyebrow,
-    title,
-    subtitle = "",
+  eyebrow,
+  title,
+  subtitle = "",
 }) {
-    return `
+  return `
       <table
         role="presentation"
         width="100%"
@@ -260,7 +260,7 @@ function sectionHeading({
             "
           >
             ${eyebrow
-            ? `
+      ? `
                   <p
                     style="
                       margin:0 0 5px;
@@ -274,8 +274,8 @@ function sectionHeading({
                     ${escapeHtml(eyebrow)}
                   </p>
                 `
-            : ""
-        }
+      : ""
+    }
   
             <p
               style="
@@ -291,7 +291,7 @@ function sectionHeading({
             </p>
   
             ${subtitle
-            ? `
+      ? `
                   <p
                     style="
                       margin:6px 0 0;
@@ -303,8 +303,8 @@ function sectionHeading({
                     ${escapeHtml(subtitle)}
                   </p>
                 `
-            : ""
-        }
+      : ""
+    }
           </td>
         </tr>
       </table>
@@ -312,14 +312,14 @@ function sectionHeading({
 }
 
 function primaryButton({
-    href,
-    label,
+  href,
+  label,
 }) {
-    if (!href) {
-        return "";
-    }
+  if (!href) {
+    return "";
+  }
 
-    return `
+  return `
       <table
         role="presentation"
         cellspacing="0"
@@ -360,14 +360,14 @@ function primaryButton({
 }
 
 function secondaryButton({
-    href,
-    label,
+  href,
+  label,
 }) {
-    if (!href) {
-        return "";
-    }
+  if (!href) {
+    return "";
+  }
 
-    return `
+  return `
       <table
         role="presentation"
         cellspacing="0"
@@ -407,9 +407,9 @@ function secondaryButton({
 }
 
 function statusBadge({
-    label,
+  label,
 }) {
-    return `
+  return `
       <span
         style="
           display:inline-block;
@@ -438,14 +438,14 @@ function statusBadge({
  */
 
 function emailLayout({
-    preheader,
-    heroTitle,
-    heroDescription,
-    content,
+  preheader,
+  heroTitle,
+  heroDescription,
+  content,
 }) {
-    const links = getWebsiteLinks();
+  const links = getWebsiteLinks();
 
-    return `
+  return `
       <!doctype html>
       <html lang="en">
         <head>
@@ -631,9 +631,9 @@ function emailLayout({
                         <tr>
                           <td style="padding:4px 11px;">
                             ${navigationLink({
-        href: links.home,
-        label: "HOME",
-    })}
+    href: links.home,
+    label: "HOME",
+  })}
                           </td>
   
                           <td
@@ -647,9 +647,9 @@ function emailLayout({
   
                           <td style="padding:4px 11px;">
                             ${navigationLink({
-        href: links.collections,
-        label: "COLLECTIONS",
-    })}
+    href: links.collections,
+    label: "COLLECTIONS",
+  })}
                           </td>
   
                           <td
@@ -663,9 +663,9 @@ function emailLayout({
   
                           <td style="padding:4px 11px;">
                             ${navigationLink({
-        href: links.contact,
-        label: "CONTACT",
-    })}
+    href: links.contact,
+    label: "CONTACT",
+  })}
                           </td>
                         </tr>
                       </table>
@@ -817,9 +817,9 @@ function emailLayout({
   
                       <p style="margin:0 0 18px;">
                         ${footerLink({
-        href: links.collections,
-        label: "Shop Sarees",
-    })}
+    href: links.collections,
+    label: "Shop Sarees",
+  })}
   
                         <span
                           style="
@@ -830,9 +830,9 @@ function emailLayout({
                         </span>
   
                         ${footerLink({
-        href: links.instagram,
-        label: "Instagram",
-    })}
+    href: links.instagram,
+    label: "Instagram",
+  })}
   
                         <span
                           style="
@@ -843,9 +843,9 @@ function emailLayout({
                         </span>
   
                         ${footerLink({
-        href: links.whatsapp,
-        label: "WhatsApp",
-    })}
+    href: links.whatsapp,
+    label: "WhatsApp",
+  })}
                       </p>
   
                       <p
@@ -893,11 +893,11 @@ function emailLayout({
  */
 
 function orderMetaCard(order) {
-    const orderDate = getOrderDate(order);
-    const paymentMethod =
-        order?.paymentMethod || "ONLINE";
+  const orderDate = getOrderDate(order);
+  const paymentMethod =
+    order?.paymentMethod || "ONLINE";
 
-    return `
+  return `
       <table
         role="presentation"
         width="100%"
@@ -1044,8 +1044,8 @@ function orderMetaCard(order) {
               "
             >
               ${escapeHtml(
-        formatMoney(getOrderTotal(order))
-    )}
+    formatMoney(getOrderTotal(order))
+  )}
             </p>
           </td>
         </tr>
@@ -1060,18 +1060,18 @@ function orderMetaCard(order) {
  */
 
 function orderItemsTable(order) {
-    const items = Array.isArray(order?.items)
-        ? order.items
-        : [];
+  const items = Array.isArray(order?.items)
+    ? order.items
+    : [];
 
-    const rows = items
-        .map((item) => {
-            const quantity = Number(item?.quantity || 1);
-            const itemPrice = getItemPrice(item);
-            const lineTotal = itemPrice * quantity;
-            const imageUrl = `https://res.cloudinary.com/dkiauapz4/image/upload/f_auto,q_auto/${item.mainImageId}`
+  const rows = items
+    .map((item) => {
+      const quantity = Number(item?.quantity || 1);
+      const itemPrice = getItemPrice(item);
+      const lineTotal = itemPrice * quantity;
+      const imageUrl = `https://res.cloudinary.com/dkiauapz4/image/upload/f_auto,q_auto/${item.mainImageId}`
 
-            return `
+      return `
           <tr>
             <td
               valign="top"
@@ -1082,14 +1082,14 @@ function orderItemsTable(order) {
               "
             >
               ${imageUrl
-                    ? `
+          ? `
                     <img
                       src="${escapeHtml(imageUrl)}"
                       width="64"
                       height="82"
                       alt="${escapeHtml(
-                        item?.name || "Pratibha Silks Saree"
-                    )}"
+            item?.name || "Pratibha Silks Saree"
+          )}"
                       style="
                         display:block;
                         width:64px;
@@ -1101,7 +1101,7 @@ function orderItemsTable(order) {
                       "
                     />
                   `
-                    : `
+          : `
                     <table
                       role="presentation"
                       width="64"
@@ -1132,7 +1132,7 @@ function orderItemsTable(order) {
                       </tr>
                     </table>
                   `
-                }
+        }
             </td>
   
             <td
@@ -1153,12 +1153,12 @@ function orderItemsTable(order) {
                 "
               >
                 ${escapeHtml(
-                    item?.name || "Pratibha Silks Saree"
-                )}
+          item?.name || "Pratibha Silks Saree"
+        )}
               </p>
   
               ${item?.sku
-                    ? `
+          ? `
                     <p
                       style="
                         margin:0;
@@ -1171,8 +1171,8 @@ function orderItemsTable(order) {
                       SKU: ${escapeHtml(item.sku)}
                     </p>
                   `
-                    : ""
-                }
+          : ""
+        }
   
               <p
                 style="
@@ -1207,22 +1207,22 @@ function orderItemsTable(order) {
             </td>
           </tr>
         `;
-        })
-        .join("");
+    })
+    .join("");
 
-    return `
+  return `
       ${sectionHeading({
-        eyebrow: "Order summary",
-        title:
-            items.length > 1
-                ? "Your selected sarees"
-                : "Your selected saree",
-        subtitle:
-            "A summary of the handcrafted pieces included in your order.",
-    })}
+    eyebrow: "Order summary",
+    title:
+      items.length > 1
+        ? "Your selected sarees"
+        : "Your selected saree",
+    subtitle:
+      "A summary of the handcrafted pieces included in your order.",
+  })}
   
       ${rows
-            ? `
+      ? `
             <table
               role="presentation"
               width="100%"
@@ -1235,7 +1235,7 @@ function orderItemsTable(order) {
               </tbody>
             </table>
           `
-            : `
+      : `
             <table
               role="presentation"
               width="100%"
@@ -1264,7 +1264,7 @@ function orderItemsTable(order) {
               </tr>
             </table>
           `
-        }
+    }
     `;
 }
 
@@ -1275,11 +1275,11 @@ function orderItemsTable(order) {
  */
 
 function orderTotals(order) {
-    const subtotal = getOrderSubtotal(order);
-    const shipping = getShippingAmount(order);
-    const discount = getDiscountAmount(order);
+  const subtotal = getOrderSubtotal(order);
+  const shipping = getShippingAmount(order);
+  const discount = getDiscountAmount(order);
 
-    return `
+  return `
       <table
         role="presentation"
         width="100%"
@@ -1338,7 +1338,7 @@ function orderTotals(order) {
               </tr>
   
               ${discount > 0
-            ? `
+      ? `
                     <tr>
                       <td
                         style="
@@ -1359,13 +1359,13 @@ function orderTotals(order) {
                         "
                       >
                         -${escapeHtml(
-                formatMoney(discount)
-            )}
+        formatMoney(discount)
+      )}
                       </td>
                     </tr>
                   `
-            : ""
-        }
+      : ""
+    }
   
               <tr>
                 <td
@@ -1387,10 +1387,10 @@ function orderTotals(order) {
                   "
                 >
                   ${escapeHtml(
-            shipping > 0
-                ? formatMoney(shipping)
-                : "Free"
-        )}
+      shipping > 0
+        ? formatMoney(shipping)
+        : "Free"
+    )}
                 </td>
               </tr>
   
@@ -1418,8 +1418,8 @@ function orderTotals(order) {
                   "
                 >
                   ${escapeHtml(
-            formatMoney(getOrderTotal(order))
-        )}
+      formatMoney(getOrderTotal(order))
+    )}
                 </td>
               </tr>
             </table>
@@ -1436,24 +1436,24 @@ function orderTotals(order) {
  */
 
 function customerDetailsCard(order) {
-    const customer = getCustomer(order);
+  const customer = getCustomer(order);
 
-    const customerName =
-        customer?.name ||
-        customer?.fullName ||
-        order?.shippingAddress?.fullName ||
-        "Not available";
+  const customerName =
+    customer?.name ||
+    customer?.fullName ||
+    order?.shippingAddress?.fullName ||
+    "Not available";
 
-    const phone =
-        customer?.phone ||
-        order?.shippingAddress?.phone ||
-        "Not available";
+  const phone =
+    customer?.phone ||
+    order?.shippingAddress?.phone ||
+    "Not available";
 
-    const email =
-        customer?.email ||
-        "Not available";
+  const email =
+    customer?.email ||
+    "Not available";
 
-    return `
+  return `
       <table
         role="presentation"
         width="100%"
@@ -1581,13 +1581,13 @@ function customerDetailsCard(order) {
 }
 
 function addressCard(order) {
-    return `
+  return `
       ${sectionHeading({
-        eyebrow: "Shipping information",
-        title: "Delivery address",
-        subtitle:
-            "Your order will be prepared for dispatch to the address below.",
-    })}
+    eyebrow: "Shipping information",
+    title: "Delivery address",
+    subtitle:
+      "Your order will be prepared for dispatch to the address below.",
+  })}
   
       <table
         role="presentation"
@@ -1613,8 +1613,8 @@ function addressCard(order) {
               "
             >
               ${escapeHtml(
-        formatAddress(order?.shippingAddress)
-    )}
+    formatAddress(order?.shippingAddress)
+  )}
             </p>
           </td>
         </tr>
@@ -1623,7 +1623,7 @@ function addressCard(order) {
 }
 
 function paymentReferenceCard(order) {
-    return `
+  return `
       <table
         role="presentation"
         width="100%"
@@ -1677,13 +1677,13 @@ function paymentReferenceCard(order) {
  */
 
 function timelineStep({
-    number,
-    title,
-    description,
-    active = false,
-    isLast = false,
+  number,
+  title,
+  description,
+  active = false,
+  isLast = false,
 }) {
-    return `
+  return `
       <tr>
         <td
           valign="top"
@@ -1704,13 +1704,13 @@ function timelineStep({
               width:34px;
               height:34px;
               background:${active
-            ? BRAND.goldMuted
-            : BRAND.white
-        };
+      ? BRAND.goldMuted
+      : BRAND.white
+    };
               border:1px solid ${active
-            ? BRAND.goldMuted
-            : BRAND.borderStrong
-        };
+      ? BRAND.goldMuted
+      : BRAND.borderStrong
+    };
               border-radius:50%;
             "
           >
@@ -1720,9 +1720,9 @@ function timelineStep({
                 valign="middle"
                 style="
                   color:${active
-            ? BRAND.white
-            : BRAND.goldMuted
-        };
+      ? BRAND.white
+      : BRAND.goldMuted
+    };
                   font-size:12px;
                   font-weight:700;
                 "
@@ -1733,7 +1733,7 @@ function timelineStep({
           </table>
   
           ${!isLast
-            ? `
+      ? `
                 <div
                   style="
                     width:1px;
@@ -1743,8 +1743,8 @@ function timelineStep({
                   "
                 ></div>
               `
-            : ""
-        }
+      : ""
+    }
         </td>
   
         <td
@@ -1778,13 +1778,13 @@ function timelineStep({
 }
 
 function nextStepsCard() {
-    return `
+  return `
       ${sectionHeading({
-        eyebrow: "Order journey",
-        title: "What happens next?",
-        subtitle:
-            "We will keep you informed as your order moves toward dispatch.",
-    })}
+    eyebrow: "Order journey",
+    title: "What happens next?",
+    subtitle:
+      "We will keep you informed as your order moves toward dispatch.",
+  })}
   
       <table
         role="presentation"
@@ -1809,27 +1809,27 @@ function nextStepsCard() {
               border="0"
             >
               ${timelineStep({
-        number: 1,
-        title: "Order confirmed",
-        description:
-            "Your order and payment details have been successfully recorded.",
-        active: true,
-    })}
+    number: 1,
+    title: "Order confirmed",
+    description:
+      "Your order and payment details have been successfully recorded.",
+    active: true,
+  })}
   
               ${timelineStep({
-        number: 2,
-        title: "Quality check and packing",
-        description:
-            "Your saree will be inspected and packed carefully by our team.",
-    })}
+    number: 2,
+    title: "Quality check and packing",
+    description:
+      "Your saree will be inspected and packed carefully by our team.",
+  })}
   
               ${timelineStep({
-        number: 3,
-        title: "Dispatch and tracking",
-        description:
-            "Tracking information will be shared once your order is dispatched.",
-        isLast: true,
-    })}
+    number: 3,
+    title: "Dispatch and tracking",
+    description:
+      "Tracking information will be shared once your order is dispatched.",
+    isLast: true,
+  })}
             </table>
           </td>
         </tr>
@@ -1844,28 +1844,28 @@ function nextStepsCard() {
  */
 
 function buildBuyerOrderEmail(order) {
-    const customer = getCustomer(order);
-    const orderUrl = getPublicOrderUrl(order);
-    const links = getWebsiteLinks();
+  const customer = getCustomer(order);
+  const orderUrl = getPublicOrderUrl(order);
+  const links = getWebsiteLinks();
 
-    const customerName =
-        customer?.name ||
-        customer?.fullName ||
-        order?.shippingAddress?.fullName ||
-        "Valued Customer";
+  const customerName =
+    customer?.name ||
+    customer?.fullName ||
+    order?.shippingAddress?.fullName ||
+    "Valued Customer";
 
-    const html = emailLayout({
-        preheader:
-            `Your Pratibha Silks order ${order.orderNumber} ` +
-            "has been confirmed.",
+  const html = emailLayout({
+    preheader:
+      `Your Pratibha Silks order ${order.orderNumber} ` +
+      "has been confirmed.",
 
-        heroTitle: "Your order is confirmed",
+    heroTitle: "Your order is confirmed",
 
-        heroDescription:
-            "Thank you for shopping with us. Your saree has been " +
-            "reserved and our team will prepare it carefully for dispatch.",
+    heroDescription:
+      "Thank you for shopping with us. Your saree has been " +
+      "reserved and our team will prepare it carefully for dispatch.",
 
-        content: `
+    content: `
         <table
           role="presentation"
           width="100%"
@@ -1877,16 +1877,16 @@ function buildBuyerOrderEmail(order) {
             <td align="center">
               <div>
                 ${statusBadge({
-            label: formatStatus(
-                getOrderStatus(order)
-            ),
-        })}
+      label: formatStatus(
+        getOrderStatus(order)
+      ),
+    })}
   
                 ${statusBadge({
-            label: formatStatus(
-                getPaymentStatus(order)
-            ),
-        })}
+      label: formatStatus(
+        getPaymentStatus(order)
+      ),
+    })}
               </div>
   
               <p
@@ -1925,9 +1925,9 @@ function buildBuyerOrderEmail(order) {
         ${paymentReferenceCard(order)}
   
         ${primaryButton({
-            href: orderUrl,
-            label: "VIEW ORDER DETAILS",
-        })}
+      href: orderUrl,
+      label: "VIEW ORDER DETAILS",
+    })}
   
         ${nextStepsCard()}
   
@@ -1973,9 +1973,9 @@ function buildBuyerOrderEmail(order) {
               </p>
   
               ${secondaryButton({
-            href: links.whatsapp,
-            label: "CHAT WITH US ON WHATSAPP",
-        })}
+      href: links.whatsapp,
+      label: "CHAT WITH US ON WHATSAPP",
+    })}
             </td>
           </tr>
         </table>
@@ -2011,83 +2011,83 @@ function buildBuyerOrderEmail(order) {
           Team Pratibha Silks
         </p>
       `,
-    });
+  });
 
-    const text = [
-        "PRATIBHA SILKS",
-        "Handpicked Heritage Drapes",
-        "",
-        `Namaste ${customerName},`,
-        "",
-        "Your payment has been received and your order is confirmed.",
-        "",
-        `Order number: ${order.orderNumber}`,
-        `Order status: ${formatStatus(
-            getOrderStatus(order)
-        )}`,
-        `Payment status: ${formatStatus(
-            getPaymentStatus(order)
-        )}`,
-        `Payment method: ${formatStatus(
-            order.paymentMethod || "ONLINE"
-        )}`,
-        getOrderDate(order)
-            ? `Order date: ${getOrderDate(order)}`
-            : "",
-        `Payment reference: ${getPaymentId(order)}`,
-        "",
-        "ORDER ITEMS",
-        buildItemsText(order),
-        "",
-        `Subtotal: ${formatMoney(
-            getOrderSubtotal(order)
-        )}`,
-        getDiscountAmount(order) > 0
-            ? `Discount: -${formatMoney(
-                getDiscountAmount(order)
-            )}`
-            : "",
-        `Shipping: ${getShippingAmount(order) > 0
-            ? formatMoney(getShippingAmount(order))
-            : "Free"
-        }`,
-        `Total paid: ${formatMoney(
-            getOrderTotal(order)
-        )}`,
-        "",
-        `Delivery address: ${formatAddress(
-            order.shippingAddress
-        )}`,
-        "",
-        orderUrl
-            ? `View your order: ${orderUrl}`
-            : "",
-        `Explore our collections: ${links.collections}`,
-        `Contact us: ${links.contact}`,
-        `WhatsApp: ${links.whatsapp}`,
-        `Instagram: ${links.instagram}`,
-        "",
-        "WHAT HAPPENS NEXT",
-        "1. Order confirmed",
-        "2. Quality check and packing",
-        "3. Dispatch and tracking",
-        "",
-        "We will share another update when your order is shipped.",
-        "",
-        "With warmth,",
-        "Team Pratibha Silks",
-    ]
-        .filter(Boolean)
-        .join("\n");
+  const text = [
+    "PRATIBHA SILKS",
+    "Handpicked Heritage Drapes",
+    "",
+    `Namaste ${customerName},`,
+    "",
+    "Your payment has been received and your order is confirmed.",
+    "",
+    `Order number: ${order.orderNumber}`,
+    `Order status: ${formatStatus(
+      getOrderStatus(order)
+    )}`,
+    `Payment status: ${formatStatus(
+      getPaymentStatus(order)
+    )}`,
+    `Payment method: ${formatStatus(
+      order.paymentMethod || "ONLINE"
+    )}`,
+    getOrderDate(order)
+      ? `Order date: ${getOrderDate(order)}`
+      : "",
+    `Payment reference: ${getPaymentId(order)}`,
+    "",
+    "ORDER ITEMS",
+    buildItemsText(order),
+    "",
+    `Subtotal: ${formatMoney(
+      getOrderSubtotal(order)
+    )}`,
+    getDiscountAmount(order) > 0
+      ? `Discount: -${formatMoney(
+        getDiscountAmount(order)
+      )}`
+      : "",
+    `Shipping: ${getShippingAmount(order) > 0
+      ? formatMoney(getShippingAmount(order))
+      : "Free"
+    }`,
+    `Total paid: ${formatMoney(
+      getOrderTotal(order)
+    )}`,
+    "",
+    `Delivery address: ${formatAddress(
+      order.shippingAddress
+    )}`,
+    "",
+    orderUrl
+      ? `View your order: ${orderUrl}`
+      : "",
+    `Explore our collections: ${links.collections}`,
+    `Contact us: ${links.contact}`,
+    `WhatsApp: ${links.whatsapp}`,
+    `Instagram: ${links.instagram}`,
+    "",
+    "WHAT HAPPENS NEXT",
+    "1. Order confirmed",
+    "2. Quality check and packing",
+    "3. Dispatch and tracking",
+    "",
+    "We will share another update when your order is shipped.",
+    "",
+    "With warmth,",
+    "Team Pratibha Silks",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-    return {
-        subject:
-            `Your Pratibha Silks order ` +
-            `${order.orderNumber} is confirmed`,
+  return {
+    subject:
+      `Your Pratibha Silks order ` +
+      `${order.orderNumber} is confirmed`,
 
-        html,
-        text,
-    };
+    html,
+    text,
+  };
 }
 
 /*
@@ -2097,30 +2097,30 @@ function buildBuyerOrderEmail(order) {
  */
 
 function adminCustomerCard(order) {
-    const customer = getCustomer(order);
+  const customer = getCustomer(order);
 
-    const customerName =
-        customer?.name ||
-        customer?.fullName ||
-        order?.shippingAddress?.fullName ||
-        "Customer";
+  const customerName =
+    customer?.name ||
+    customer?.fullName ||
+    order?.shippingAddress?.fullName ||
+    "Customer";
 
-    const phone =
-        customer?.phone ||
-        order?.shippingAddress?.phone ||
-        "Not available";
+  const phone =
+    customer?.phone ||
+    order?.shippingAddress?.phone ||
+    "Not available";
 
-    const email =
-        customer?.email ||
-        "Not provided";
+  const email =
+    customer?.email ||
+    "Not provided";
 
-    return `
+  return `
       ${sectionHeading({
-        eyebrow: "Customer information",
-        title: "Customer details",
-        subtitle:
-            "Contact and payment details for this order.",
-    })}
+    eyebrow: "Customer information",
+    title: "Customer details",
+    subtitle:
+      "Contact and payment details for this order.",
+  })}
   
       <table
         role="presentation"
@@ -2242,8 +2242,8 @@ function adminCustomerCard(order) {
                   "
                 >
                   ${escapeHtml(
-        formatStatus(order?.source || "WEBSITE")
-    )}
+    formatStatus(order?.source || "WEBSITE")
+  )}
                 </td>
               </tr>
   
@@ -2284,17 +2284,17 @@ function adminCustomerCard(order) {
 }
 
 function customerNotesCard(order) {
-    if (!order?.customerNotes) {
-        return "";
-    }
+  if (!order?.customerNotes) {
+    return "";
+  }
 
-    return `
+  return `
       ${sectionHeading({
-        eyebrow: "Order instructions",
-        title: "Customer notes",
-        subtitle:
-            "Review these instructions before preparing the package.",
-    })}
+    eyebrow: "Order instructions",
+    title: "Customer notes",
+    subtitle:
+      "Review these instructions before preparing the package.",
+  })}
   
       <table
         role="presentation"
@@ -2326,15 +2326,15 @@ function customerNotesCard(order) {
 }
 
 function adminActionButtons(order) {
-    const orderUrl = getPublicOrderUrl(order);
-    const customerWhatsAppUrl =
-        getCustomerWhatsAppUrl(order);
+  const orderUrl = getPublicOrderUrl(order);
+  const customerWhatsAppUrl =
+    getCustomerWhatsAppUrl(order);
 
-    if (!orderUrl && !customerWhatsAppUrl) {
-        return "";
-    }
+  if (!orderUrl && !customerWhatsAppUrl) {
+    return "";
+  }
 
-    return `
+  return `
       <table
         role="presentation"
         width="100%"
@@ -2345,13 +2345,13 @@ function adminActionButtons(order) {
       >
         <tr>
           ${orderUrl
-            ? `
+      ? `
                 <td
                   align="center"
                   width="${customerWhatsAppUrl
-                ? "50%"
-                : "100%"
-            }"
+        ? "50%"
+        : "100%"
+      }"
                   style="padding:5px;"
                 >
                   <a
@@ -2373,11 +2373,11 @@ function adminActionButtons(order) {
                   </a>
                 </td>
               `
-            : ""
-        }
+      : ""
+    }
   
           ${customerWhatsAppUrl
-            ? `
+      ? `
                 <td
                   align="center"
                   width="${orderUrl ? "50%" : "100%"}"
@@ -2385,8 +2385,8 @@ function adminActionButtons(order) {
                 >
                   <a
                     href="${escapeHtml(
-                customerWhatsAppUrl
-            )}"
+        customerWhatsAppUrl
+      )}"
                     style="
                       display:block;
                       padding:14px 15px;
@@ -2404,15 +2404,15 @@ function adminActionButtons(order) {
                   </a>
                 </td>
               `
-            : ""
-        }
+      : ""
+    }
         </tr>
       </table>
     `;
 }
 
 function fulfilmentChecklist() {
-    return `
+  return `
       <table
         role="presentation"
         width="100%"
@@ -2507,35 +2507,35 @@ function fulfilmentChecklist() {
  */
 
 function buildAdminOrderEmail(order) {
-    const customer = getCustomer(order);
-    const orderUrl = getPublicOrderUrl(order);
+  const customer = getCustomer(order);
+  const orderUrl = getPublicOrderUrl(order);
 
-    const customerName =
-        customer?.name ||
-        customer?.fullName ||
-        order?.shippingAddress?.fullName ||
-        "Customer";
+  const customerName =
+    customer?.name ||
+    customer?.fullName ||
+    order?.shippingAddress?.fullName ||
+    "Customer";
 
-    const phone =
-        customer?.phone ||
-        order?.shippingAddress?.phone ||
-        "Not available";
+  const phone =
+    customer?.phone ||
+    order?.shippingAddress?.phone ||
+    "Not available";
 
-    const customerWhatsAppUrl =
-        getCustomerWhatsAppUrl(order);
+  const customerWhatsAppUrl =
+    getCustomerWhatsAppUrl(order);
 
-    const html = emailLayout({
-        preheader:
-            `New paid order ${order.orderNumber} received ` +
-            `from ${customerName}.`,
+  const html = emailLayout({
+    preheader:
+      `New paid order ${order.orderNumber} received ` +
+      `from ${customerName}.`,
 
-        heroTitle: "New paid order received",
+    heroTitle: "New paid order received",
 
-        heroDescription:
-            `Order ${order.orderNumber} has been successfully ` +
-            "paid and is ready for fulfilment.",
+    heroDescription:
+      `Order ${order.orderNumber} has been successfully ` +
+      "paid and is ready for fulfilment.",
 
-        content: `
+    content: `
         <table
           role="presentation"
           width="100%"
@@ -2547,12 +2547,12 @@ function buildAdminOrderEmail(order) {
             <td align="center">
               <div>
                 ${statusBadge({
-            label: "Payment received",
-        })}
+      label: "Payment received",
+    })}
   
                 ${statusBadge({
-            label: "Action required",
-        })}
+      label: "Action required",
+    })}
               </div>
   
               <p
@@ -2592,88 +2592,88 @@ function buildAdminOrderEmail(order) {
   
         ${fulfilmentChecklist()}
       `,
-    });
+  });
 
-    const text = [
-        "PRATIBHA SILKS - NEW PAID ORDER",
-        "",
-        `Order: ${order.orderNumber}`,
-        `Order status: ${formatStatus(
-            getOrderStatus(order)
-        )}`,
-        `Payment status: ${formatStatus(
-            getPaymentStatus(order)
-        )}`,
-        `Payment method: ${formatStatus(
-            order.paymentMethod || "ONLINE"
-        )}`,
-        getOrderDate(order)
-            ? `Order date: ${getOrderDate(order)}`
-            : "",
-        "",
-        `Customer: ${customerName}`,
-        `Phone: ${phone}`,
-        `Email: ${customer?.email || "Not provided"}`,
-        `Source: ${formatStatus(
-            order?.source || "WEBSITE"
-        )}`,
-        `Payment ID: ${getPaymentId(order)}`,
-        "",
-        "ITEMS",
-        buildItemsText(order),
-        "",
-        `Subtotal: ${formatMoney(
-            getOrderSubtotal(order)
-        )}`,
-        getDiscountAmount(order) > 0
-            ? `Discount: -${formatMoney(
-                getDiscountAmount(order)
-            )}`
-            : "",
-        `Shipping: ${getShippingAmount(order) > 0
-            ? formatMoney(getShippingAmount(order))
-            : "Free"
-        }`,
-        `Total paid: ${formatMoney(
-            getOrderTotal(order)
-        )}`,
-        "",
-        `Delivery address: ${formatAddress(
-            order.shippingAddress
-        )}`,
-        order?.customerNotes
-            ? `Customer notes: ${order.customerNotes}`
-            : "",
-        "",
-        orderUrl
-            ? `Open order: ${orderUrl}`
-            : "",
-        customerWhatsAppUrl
-            ? `Message customer: ${customerWhatsAppUrl}`
-            : "",
-        "",
-        "FULFILMENT CHECKLIST",
-        "□ Verify the saree and SKU",
-        "□ Complete quality inspection",
-        "□ Review delivery details",
-        "□ Pack securely",
-        "□ Update order status",
-        "□ Add tracking details after dispatch",
-    ]
-        .filter(Boolean)
-        .join("\n");
+  const text = [
+    "PRATIBHA SILKS - NEW PAID ORDER",
+    "",
+    `Order: ${order.orderNumber}`,
+    `Order status: ${formatStatus(
+      getOrderStatus(order)
+    )}`,
+    `Payment status: ${formatStatus(
+      getPaymentStatus(order)
+    )}`,
+    `Payment method: ${formatStatus(
+      order.paymentMethod || "ONLINE"
+    )}`,
+    getOrderDate(order)
+      ? `Order date: ${getOrderDate(order)}`
+      : "",
+    "",
+    `Customer: ${customerName}`,
+    `Phone: ${phone}`,
+    `Email: ${customer?.email || "Not provided"}`,
+    `Source: ${formatStatus(
+      order?.source || "WEBSITE"
+    )}`,
+    `Payment ID: ${getPaymentId(order)}`,
+    "",
+    "ITEMS",
+    buildItemsText(order),
+    "",
+    `Subtotal: ${formatMoney(
+      getOrderSubtotal(order)
+    )}`,
+    getDiscountAmount(order) > 0
+      ? `Discount: -${formatMoney(
+        getDiscountAmount(order)
+      )}`
+      : "",
+    `Shipping: ${getShippingAmount(order) > 0
+      ? formatMoney(getShippingAmount(order))
+      : "Free"
+    }`,
+    `Total paid: ${formatMoney(
+      getOrderTotal(order)
+    )}`,
+    "",
+    `Delivery address: ${formatAddress(
+      order.shippingAddress
+    )}`,
+    order?.customerNotes
+      ? `Customer notes: ${order.customerNotes}`
+      : "",
+    "",
+    orderUrl
+      ? `Open order: ${orderUrl}`
+      : "",
+    customerWhatsAppUrl
+      ? `Message customer: ${customerWhatsAppUrl}`
+      : "",
+    "",
+    "FULFILMENT CHECKLIST",
+    "□ Verify the saree and SKU",
+    "□ Complete quality inspection",
+    "□ Review delivery details",
+    "□ Pack securely",
+    "□ Update order status",
+    "□ Add tracking details after dispatch",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-    return {
-        subject:
-            `New paid order ${order.orderNumber} · ` +
-            `${formatMoney(getOrderTotal(order))}`,
+  return {
+    subject:
+      `New paid order ${order.orderNumber} · ` +
+      `${formatMoney(getOrderTotal(order))}`,
 
-        html,
-        text,
-    };
+    html,
+    text,
+  };
 }
 
 module.exports = {
-    buildBuyerOrderEmail,
-    buildAdminOrderEmail,
+  buildBuyerOrderEmail,
+  buildAdminOrderEmail,
 };

@@ -43,7 +43,7 @@ async function confirmPaidOrder({
 
       /*
        * Idempotent handling:
-       * payment verification or webhook may call this more than once.
+       * verification and webhook may both confirm the same payment.
        */
       if (fresh.paymentStatus === "PAID") {
         alreadyProcessed = true;
@@ -67,26 +67,84 @@ async function confirmPaidOrder({
         return;
       }
 
+      const reservationWasReleased =
+        fresh.orderStatus === "CANCELLED" ||
+        (
+          fresh.reservationExpiresAt &&
+          fresh.reservationExpiresAt.getTime() <= Date.now()
+        );
+
       /*
-       * Payment received after reservation cancellation or expiry.
+       * Payment succeeded after cancellation or reservation expiry.
+       *
+       * The old reservation no longer exists, so attempt to claim
+       * currently available stock atomically.
        */
-      if (fresh.orderStatus === "CANCELLED") {
+      if (reservationWasReleased) {
+        const claimedProducts = [];
+
+        for (const item of fresh.items) {
+          const quantity = Number(item.quantity || 1);
+
+          const product = await Product.findOneAndUpdate(
+            {
+              _id: item.productId,
+              stock: { $gte: quantity },
+              $or: [
+                { soldOrder: { $exists: false } },
+                { soldOrder: null },
+              ],
+            },
+            {
+              $inc: {
+                stock: -quantity,
+              },
+              $set: {
+                soldOrder: fresh._id,
+                reservedStock: 0,
+                reservationExpiresAt: null,
+              },
+              $unset: {
+                reservedOrder: "",
+              },
+            },
+            {
+              new: true,
+              session,
+            }
+          );
+
+          if (!product) {
+            /*
+             * Throwing here rolls back any products already claimed
+             * earlier in this transaction.
+             */
+            const error = new Error(
+              `${item.sku} is no longer available. Payment requires refund or manual review.`
+            );
+
+            error.statusCode = 409;
+            error.code = "PAID_PRODUCT_UNAVAILABLE";
+            throw error;
+          }
+
+          claimedProducts.push(product);
+        }
+
         fresh.paymentStatus = "PAID";
-        fresh.orderStatus =
-          "PAYMENT_RECEIVED_AFTER_EXPIRY";
+        fresh.orderStatus = "CONFIRMED";
         fresh.razorpayPaymentId = paymentId;
         fresh.razorpaySignature = signature;
         fresh.reservationExpiresAt = null;
-        fresh.paymentFailureReason = allowExpiredPayment
-          ? "Payment received after reservation was released."
-          : "Payment verification arrived after reservation was released.";
+        fresh.paymentFailureReason = undefined;
 
         savedOrder = await fresh.save({ session });
         return;
       }
 
       /*
-       * Finalize reserved inventory only after successful payment.
+       * Normal successful-payment flow:
+       * convert the existing reservation into a completed sale.
        */
       for (const item of fresh.items) {
         const product = await finalizeReservation(
@@ -106,7 +164,9 @@ async function confirmPaidOrder({
             const error = new Error(
               `Reservation missing for ${item.sku}`
             );
+
             error.statusCode = 409;
+            error.code = "RESERVATION_MISSING";
             throw error;
           }
         }
@@ -128,11 +188,8 @@ async function confirmPaidOrder({
       );
     }
 
-    savedOrder.$locals =
-      savedOrder.$locals || {};
-
-    savedOrder.$locals.alreadyProcessed =
-      alreadyProcessed;
+    savedOrder.$locals = savedOrder.$locals || {};
+    savedOrder.$locals.alreadyProcessed = alreadyProcessed;
 
     return savedOrder;
   } finally {

@@ -17,6 +17,9 @@ const orderItemSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    mainImageId: {
+      type: String
+    },
   },
   { _id: false }
 );

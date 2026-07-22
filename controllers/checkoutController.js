@@ -246,7 +246,7 @@ async function createCheckoutOrder(req, res) {
         productId: product._id,
         sku: product.sku,
         name: product.name,
-        image: product.mainImageId,
+        mainImageId: product.mainImageId,
         quantity: 1,
         listedPrice: Number(product.price),
         sellingPrice
