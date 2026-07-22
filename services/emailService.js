@@ -20,14 +20,9 @@ function getResendClient() {
 }
 
 function getFromAddress() {
-    const fromName =
-        process.env.EMAIL_FROM_NAME || "Pratibha Silks";
+    const fromName = "Pratibha Silks";
 
-    const fromAddress = process.env.EMAIL_FROM_ADDRESS;
-
-    if (!fromAddress) {
-        throw new Error("EMAIL_FROM_ADDRESS is not configured.");
-    }
+    const fromAddress = "care@pratibhasilks.com";
 
     return `${fromName} <${fromAddress}>`;
 }
@@ -52,7 +47,7 @@ async function sendEmail({
             subject,
             html,
             text,
-            replyTo: process.env.ADMIN_NOTIFICATION_EMAIL || undefined,
+            replyTo: "care@pratibhasilks.com",
         },
         {
             idempotencyKey,
@@ -91,15 +86,7 @@ async function sendBuyerOrderEmail(order) {
 }
 
 async function sendAdminOrderEmail(order) {
-    const adminEmail = String(
-        process.env.ADMIN_NOTIFICATION_EMAIL || ""
-    ).trim();
-
-    if (!adminEmail) {
-        throw new Error(
-            "ADMIN_NOTIFICATION_EMAIL is not configured."
-        );
-    }
+    const adminEmail = ["care@pratibhasilks.com", "pratibhasilks@gmail.com"];
 
     const content = buildAdminOrderEmail(order);
 
